@@ -1,0 +1,48 @@
+import type { Plan } from "@/types/plan"
+
+export const mockPlans: Plan[] = [
+  {
+    id: "PLN-001",
+    name: "Basico",
+    speed: "10 Mbps",
+    downloadSpeed: 10,
+    uploadSpeed: 5,
+    price: 349,
+    description: "Internet para uso basico: redes sociales, correo y navegacion.",
+    isPopular: false,
+    clientCount: 45,
+  },
+  {
+    id: "PLN-002",
+    name: "Hogar",
+    speed: "30 Mbps",
+    downloadSpeed: 30,
+    uploadSpeed: 15,
+    price: 499,
+    description: "Ideal para familias: streaming, videollamadas y multiples dispositivos.",
+    isPopular: true,
+    clientCount: 128,
+  },
+  {
+    id: "PLN-003",
+    name: "Plus",
+    speed: "50 Mbps",
+    downloadSpeed: 50,
+    uploadSpeed: 25,
+    price: 699,
+    description: "Para quienes necesitan mas: gaming, trabajo remoto y descargas rapidas.",
+    isPopular: false,
+    clientCount: 89,
+  },
+  {
+    id: "PLN-004",
+    name: "Empresarial",
+    speed: "100 Mbps",
+    downloadSpeed: 100,
+    uploadSpeed: 50,
+    price: 999,
+    description: "Velocidad maxima para negocios y usuarios exigentes.",
+    isPopular: false,
+    clientCount: 32,
+  },
+]

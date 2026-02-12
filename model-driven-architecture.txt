@@ -1,0 +1,136 @@
+Para comparar tu panel de administración ISP con Wispro, revisé cada ruta principal del sitio y agrupé sus funcionalidades en módulos. Aquí tienes un resumen de las características clave y una propuesta de arquitectura model‑driven (MDA) que podrías tomar como referencia.
+
+1. Gestión de red (OLT–ONU y fibra óptica)
+
+Control centralizado de OLT y ONU: Vincula y aprovisiona ONTs en un solo lugar, ajusta el ancho de banda por cliente/plan, monitoriza la potencia de conexión y realiza autorizaciones/aprovisionamientos simplificados
+wispro.co
+.
+
+Geolocalización y NAP: Geolocaliza OLTs y cajas NAP en Google Maps y gestiona visualmente los puertos disponibles; permite asignar ONUs a puertos con un clic y actualizar automáticamente la base de datos al conectar la ONU
+wispro.co
+.
+
+Alertas y diagnóstico: Alertas de potencia y control de CATV; visualización de potencia para detectar fallas
+wispro.co
+.
+
+2. Facturación electrónica y cobros
+
+Generación y envío de facturas: Emite facturas electrónicas legales en Argentina, Colombia, Ecuador, México y Perú; el equipo técnico ayuda a habilitar la integración y luego el proceso queda automatizado
+wispro.co
+.
+
+Flujo de facturación: Configura ciclos de facturación por plan/cliente, envía notificaciones de pago por WhatsApp, email o SMS, visualiza el estado de facturas emitidas/pagadas/vencidas e integra pasarelas de pago
+wispro.co
+.
+
+Pagos y conciliación: Integración con múltiples pasarelas (Mercado Pago, Pagoralia, Wompi, ComBopay, PayU, etc.) y opciones locales según el país
+wispro.co
+.
+
+Funciones avanzadas: Configuración de impuestos y descuentos, gestión de promesas de pago, ítems recurrentes y conciliación de pagos
+wispro.co
+.
+
+3. Apps móviles
+
+a. App para instaladores (Wispro App)
+
+Organización de órdenes de instalación, agenda y calendario.
+
+Contacto con el cliente y geolocalización.
+
+Visualización de nodo/NAP, descarga de contrato en PDF y registro de precintos FTTH.
+
+Posibilidad de agregar imágenes/equipos, ver el estado de la ONT y evaluar la factibilidad de la instalación
+wispro.co
+.
+
+b. App para clientes (Alerta Internet)
+
+Ver y descargar facturas, pagar por múltiples medios, crear promesas de pago y enviar comprobantes
+wispro.co
+wispro.co
+.
+
+Reportar problemas de conexión mediante tickets y consultar su estado
+wispro.co
+.
+
+Cambiar contraseña Wi‑Fi, solicitar cambio de plan, ver gráficos de consumo y acceder a canales de contacto (teléfono, WhatsApp, email, Google Maps)
+wispro.co
+wispro.co
+.
+
+Gestión multi‑cuenta y acceso mediante QR; balance de cuenta e información de facturas pendientes
+wispro.co
+.
+
+Recordatorios automáticos: notificaciones push de nuevo pago, factura emitida, vencimientos, contratos deshabilitados o tickets finalizados
+wispro.co
+.
+
+Opciones opcionales: reportes de problemas, creación de promesas de pago (48 h de prórroga) y envío de comprobantes, que agilizan la validación del pago
+wispro.co
+wispro.co
+.
+
+4. Gestión remota de equipos (IXC ACS – protocolo TR‑069)
+
+Gestión remota de routers y CPEs mediante TR‑069: actualizaciones de firmware, cambios de parámetros, diagnósticos de red y estandarización de marcas/modelos
+wispro.co
+.
+
+Pruebas en tiempo real: latencia, escaneo de redes cercanas y velocidad
+wispro.co
+.
+
+Integración con otros sistemas y auto‑configuración ágil de dispositivos; actualizaciones sin interrupciones y protección continua contra configuraciones erróneas
+wispro.co
+wispro.co
+.
+
+Interfaz sencilla que reduce el tiempo de capacitación del equipo.
+
+5. Comunicación omnicanal (¡Hola! Suite)
+
+Centraliza WhatsApp, redes sociales y llamadas en una sola bandeja, liberando a los equipos de la sobrecarga operativa
+wispro.co
+.
+
+Flujos de atención automatizados: modelos de mensajes automáticos, registro completo por cliente y dashboard con métricas y filtros
+wispro.co
+.
+
+Funcionalidades: asignación de áreas, historial de conversaciones, dashboard de métricas, asignación de etiquetas y seguimiento del tiempo de respuesta del chat
+wispro.co
+wispro.co
+.
+
+API oficial de WhatsApp y atención en tiempo real para responder tres veces más rápido sin perder el toque humano.
+
+6. Otras observaciones
+
+En cada página se hace énfasis en soporte 24/7 y soluciones personalizadas para adaptarse al modelo de negocio del ISP
+wispro.co
+.
+
+El sitio promueve la automatización de tareas repetitivas y la escalabilidad en la nube, con acceso multi‑plataforma.
+
+Propuesta de Arquitectura Model‑Driven (MDA)
+
+Para replicar o mejorar estas funcionalidades, una arquitectura MDA puede estructurarse en módulos conectados por entidades y procesos:
+
+Módulo	Entidades/Modelos clave	Funcionalidades sugeridas
+Clientes y contratos	Cliente, Contrato, Plan de servicio, Dirección, Nodo/NAP	CRUD de clientes y contratos; asignación de planes y equipos; estados (activo, suspendido, deshabilitado); historial de cambios.
+Equipos y red	OLT, ONU, NAP, Puerto, Equipo CPE, Firmware	Inventario de OLT/ONU/CPE; gestión de puertos y ONUs; potencias de señal; asignación de equipos; actualización remota (TR‑069); geolocalización.
+Instalaciones y órdenes	Orden de instalación, Técnico, Agenda, Precinto FTTH	Gestión de órdenes, calendarización, asignación de técnicos, registro de material utilizado, generación de contratos PDF, factibilidad.
+Facturación y pagos	Factura, Ciclo de facturación, Pasarela de pago, Medio de pago, Pago, Promesa de pago, Impuesto/Descuento	Emisión de facturas electrónicas (adaptadas por país); configuración de ciclos; integración con múltiples pasarelas; control de impuestos/descuentos; envío de facturas (WhatsApp/email/SMS); conciliación de pagos; promesas de pago; estados (emitida/pagada/vencida).
+Aplicaciones móviles	Sesión móvil, Notificación, Ticket (soporte), Promesa de pago, Comprobante de pago	Ver y pagar facturas; crear promesas y tickets; cambio de contraseña Wi‑Fi; notificaciones push; gestión multi‑cuenta con QR; gráficas de consumo; canales de contacto.
+Soporte y tickets	Ticket, Categoría, Estado, Mensajes, Archivo adjunto	Registro de problemas, seguimiento y resoluciones; asignación de responsables; comunicación con el cliente; estados (pendiente/resuelto).
+Comunicaciones omnicanal	Conversación, Canal (WhatsApp, Instagram, Facebook, Teléfono), Plantilla de mensaje, Etiqueta, Agente	Centralización de chats; automatización de mensajes; registro histórico; asignación a áreas/equipos; métricas (tiempo de respuesta, SLA); integraciones con API oficial de WhatsApp.
+Notificaciones y recordatorios	Evento, Tipo de notificación, Medio (push, email, WhatsApp), Programación	Notificaciones automáticas de facturas emitidas/vencimientos/pagos/tickets; mensajes personalizados; campañas de marketing; configuración de reglas por cliente/plan.
+Integraciones externas	Servicio de facturación electrónica, Pasarelas de pago, API TR‑069, API WhatsApp	Abstracción de servicios externos; control de versiones; monitoreo de integraciones; fallback y errores.
+Conclusión
+
+Wispro ofrece un ecosistema muy completo para ISP: integra gestión de red, facturación electrónica con cobros, apps móviles para técnicos y clientes, gestión remota de dispositivos TR‑069 y una plataforma omnicanal para atención al cliente. La arquitectura model‑driven propuesta separa claramente dominios (clientes, red, facturación, soporte, comunicaciones) y permite extender funcionalidades sin romper el modelo. Revisando cada ruta del sitio te permitirá identificar qué módulos o entidades aún no tienes en tu dashboard y priorizar su implementación para ofrecer un servicio tan o más completo que Wispro.
