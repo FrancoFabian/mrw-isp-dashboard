@@ -1,7 +1,7 @@
 import type { UserRole } from '@/types/roles'
 import type { TaskItem, TaskType, TaskPriority, RoleTag } from '@/types/task'
 import type { GeneralArea } from '@/types/feedback'
-import { routeToSection, userRoleToRoleTag } from './routeToSection'
+import { parseContextToken, routeToSection, userRoleToRoleTag } from './routeToSection'
 import { deriveTitleFromMessage } from './deriveTitleFromMessage'
 
 interface CreateTaskOptions {
@@ -17,7 +17,7 @@ interface CreateTaskOptions {
 }
 
 /**
- * Creates a new TaskItem from user input and context
+ * Creates a new TaskItem from user input and context.
  */
 export function createTaskFromMessage(options: CreateTaskOptions): TaskItem {
     const {
@@ -32,6 +32,12 @@ export function createTaskFromMessage(options: CreateTaskOptions): TaskItem {
         authorName,
     } = options
 
+    const contextToken = parseContextToken(message)
+    const strippedMessage = contextToken
+        ? message.replace(contextToken.raw, '').trim()
+        : message.trim()
+    const normalizedMessage = strippedMessage || message.trim()
+
     const now = new Date().toISOString()
 
     let roleTag: RoleTag
@@ -41,19 +47,19 @@ export function createTaskFromMessage(options: CreateTaskOptions): TaskItem {
         roleTag = 'GENERAL'
         sectionTag = generalArea
     } else {
-        roleTag = userRoleToRoleTag(role)
-        sectionTag = routeToSection(pathname, role)
+        roleTag = contextToken?.roleTag ?? userRoleToRoleTag(role)
+        sectionTag = contextToken?.sectionTag ?? routeToSection(pathname, role)
     }
 
-    // Use a more robust ID generator to avoid collisions in same-millisecond transactions
+    // Add random suffix to avoid collisions when multiple tasks are created in one tick.
     const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase()
     const id = `TASK-${Date.now().toString(36).toUpperCase()}-${randomSuffix}`
 
     return {
         id,
         createdAt: now,
-        title: deriveTitleFromMessage(message),
-        message,
+        title: deriveTitleFromMessage(normalizedMessage),
+        message: normalizedMessage,
         roleTag,
         sectionTag,
         route: pathname,

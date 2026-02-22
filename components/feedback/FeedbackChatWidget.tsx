@@ -11,6 +11,7 @@ import {
     SheetTrigger,
 } from "@/components/ui/sheet"
 import { useRole } from "@/contexts/role-context"
+import { isChatRouteExcluded } from "@/helpers/routeToSection"
 import { ChatPanel } from "./ChatPanel"
 
 export function FeedbackChatWidget() {
@@ -23,7 +24,7 @@ export function FeedbackChatWidget() {
         setMounted(true)
     }, [])
 
-    if (!mounted) {
+    if (!mounted || isChatRouteExcluded(pathname)) {
         return null
     }
 

@@ -1,7 +1,20 @@
 "use client"
 
-import { useState } from "react"
-import { Send, Bug, Sparkles, AlertTriangle, ToggleLeft, ToggleRight, Camera } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import {
+    Send,
+    Bug,
+    Sparkles,
+    AlertTriangle,
+    ToggleLeft,
+    ToggleRight,
+    Camera,
+    Loader2,
+    Hash,
+    Wand2,
+    RotateCcw,
+    Cpu,
+} from "lucide-react"
 import { useChat } from "@/stores/chat-context"
 import { useTasks } from "@/stores/tasks-context"
 import { createTaskFromMessage } from "@/helpers/createTaskFromMessage"
@@ -13,12 +26,22 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import {
+    requestAssistantReply,
+    requestImprovedMessage,
+    requestUsageSummary,
+} from "@/lib/chat/assistant-client"
 import type { UserRole } from "@/types/roles"
 import type { TaskType, TaskPriority } from "@/types/task"
 import type { GeneralArea } from "@/types/feedback"
+import type { AssistantUsageMetrics, UsageSummaryResponse } from "@/types/chat-assistant"
 import { generalAreas, generalAreaLabels } from "@/types/feedback"
 import { taskTypeLabels, taskPriorityLabels, roleTagLabels } from "@/types/task"
-import { routeToSection } from "@/helpers/routeToSection"
+import {
+    buildContextToken,
+    routeToSection,
+    userRoleToRoleTag,
+} from "@/helpers/routeToSection"
 
 interface MessageComposerProps {
     role: UserRole
@@ -33,17 +56,42 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     const [isGeneralMode, setIsGeneralMode] = useState(false)
     const [generalArea, setGeneralArea] = useState<GeneralArea>("General")
     const [includeScreenshot, setIncludeScreenshot] = useState(false)
+    const [isSending, setIsSending] = useState(false)
+    const [isImproving, setIsImproving] = useState(false)
+    const [originalMessageBeforeImprove, setOriginalMessageBeforeImprove] = useState<string | null>(null)
+    const [modelPreference, setModelPreference] = useState<"default" | "gpt-5-mini">("default")
+    const [latestUsage, setLatestUsage] = useState<AssistantUsageMetrics | null>(null)
+    const [usageSummary, setUsageSummary] = useState<UsageSummaryResponse | null>(null)
 
     const { addMessage } = useChat()
     const { addTask } = useTasks()
 
     const currentSection = routeToSection(pathname, role)
+    const currentRoleTag = userRoleToRoleTag(role)
+    const currentContextToken = isGeneralMode
+        ? buildContextToken('GENERAL', generalArea)
+        : buildContextToken(currentRoleTag, currentSection)
 
-    const handleSubmit = () => {
+    const refreshUsageSummary = useCallback(async () => {
+        try {
+            const summary = await requestUsageSummary()
+            setUsageSummary(summary)
+        } catch {
+            // Keep chat usable if telemetry endpoint fails.
+        }
+    }, [])
+
+    useEffect(() => {
+        void refreshUsageSummary()
+    }, [refreshUsageSummary])
+
+    const handleSubmit = async () => {
         const trimmed = message.trim()
-        if (!trimmed) return
+        if (!trimmed || isSending || isImproving) return
 
-        // Create the task
+        setIsSending(true)
+
+        // Create and register the task immediately to avoid losing user intent.
         const task = createTaskFromMessage({
             message: trimmed,
             role,
@@ -56,42 +104,156 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
             authorName: userName,
         })
 
-        // Add task to store
         addTask(task)
 
-        // Add user message
         addMessage({
             sender: "USER",
             text: trimmed,
             taskId: task.id,
         })
 
-        // Add bot confirmation
-        const locationText = isGeneralMode
-            ? `GENERAL / ${generalArea}`
+        const fallbackLocationText = isGeneralMode
+            ? `GENERAL / ${generalAreaLabels[generalArea]}`
             : `${roleTagLabels[task.roleTag]} / ${task.sectionTag}`
+        const fallbackContextToken = buildContextToken(task.roleTag, task.sectionTag)
 
-        addMessage({
-            sender: "BOT",
-            text: `✅ Listo. Registré tu ${taskTypeLabels[taskType].toLowerCase()} en **${locationText}**.\n\nID: ${task.id}\nPrioridad: ${taskPriorityLabels[priority]}`,
-        })
+        const fallbackReply = [
+            `Listo. Registre tu ${taskTypeLabels[taskType].toLowerCase()} en ${fallbackLocationText}.`,
+            `Ruta: ${task.route}`,
+            `ID: ${task.id} | Prioridad: ${taskPriorityLabels[priority]}`,
+            `Tip: para mayor precision usa ${fallbackContextToken}. Ejemplo: #Clients/pagos.`,
+        ].join("\n")
 
-        // Reset form
+        // Reset form fields while the assistant response is being generated.
         setMessage("")
+        setOriginalMessageBeforeImprove(null)
         setTaskType("OTHER")
         setPriority("MEDIUM")
         setIncludeScreenshot(false)
+
+        try {
+            const assistantResponse = await requestAssistantReply({
+                message: trimmed,
+                route: pathname,
+                sectionTag: task.sectionTag,
+                role,
+                roleTag: task.roleTag,
+                taskId: task.id,
+                taskType,
+                priority,
+                userName,
+                isGeneralMode,
+                modelPreference,
+            })
+
+            if (assistantResponse.usage) {
+                setLatestUsage(assistantResponse.usage)
+            }
+            await refreshUsageSummary()
+
+            addMessage({
+                sender: "BOT",
+                text: assistantResponse.reply,
+            })
+        } catch {
+            addMessage({
+                sender: "BOT",
+                text: fallbackReply,
+            })
+        } finally {
+            setIsSending(false)
+        }
+    }
+
+    const handleImproveMessage = async () => {
+        const trimmed = message.trim()
+        if (!trimmed || isSending || isImproving) return
+
+        setIsImproving(true)
+        const original = message
+
+        try {
+            const improved = await requestImprovedMessage({
+                message: original,
+                route: pathname,
+                sectionTag: isGeneralMode ? generalArea : currentSection,
+                role,
+                roleTag: isGeneralMode ? "GENERAL" : currentRoleTag,
+                taskType,
+                priority,
+                userName,
+                isGeneralMode,
+                modelPreference,
+            })
+
+            if (originalMessageBeforeImprove === null) {
+                setOriginalMessageBeforeImprove(original)
+            }
+            setMessage(improved.improvedMessage)
+
+            if (improved.usage) {
+                setLatestUsage(improved.usage)
+            }
+            await refreshUsageSummary()
+        } catch {
+            // Keep original text if improvement request fails.
+        } finally {
+            setIsImproving(false)
+        }
+    }
+
+    const handleRevertImprove = () => {
+        if (originalMessageBeforeImprove === null) return
+        setMessage(originalMessageBeforeImprove)
+        setOriginalMessageBeforeImprove(null)
+    }
+
+    const handleInsertContextToken = () => {
+        setMessage((prev) => {
+            const current = prev.trimStart()
+            if (current.startsWith('#')) {
+                return prev
+            }
+            return current.length === 0
+                ? `${currentContextToken} `
+                : `${currentContextToken} ${prev}`
+        })
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault()
-            handleSubmit()
+            void handleSubmit()
         }
     }
 
     return (
         <div className="border-t border-border bg-background p-4">
+            <div className="mb-3 rounded-lg border border-border bg-secondary/40 p-3">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-1">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Contexto detectado
+                        </p>
+                        <p className="text-xs text-foreground">
+                            Seccion: {isGeneralMode ? generalAreaLabels[generalArea] : currentSection}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Ruta: {pathname}</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleInsertContextToken}
+                        className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary"
+                    >
+                        <Hash className="h-3.5 w-3.5" />
+                        {currentContextToken}
+                    </button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                    Tip: puedes citar contexto manual con etiquetas como #Clients/pagos.
+                </p>
+            </div>
+
             {/* Quick actions row */}
             <div className="mb-3 flex flex-wrap gap-2">
                 {/* Type quick actions */}
@@ -137,8 +299,8 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
             </div>
 
             {/* General mode toggle */}
-            <div className="mb-3 flex items-center justify-between rounded-lg bg-secondary/50 px-3 py-2">
-                <div className="flex items-center gap-2">
+            <div className="mb-3 rounded-lg bg-secondary/50 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
                     <button
                         type="button"
                         onClick={() => setIsGeneralMode(!isGeneralMode)}
@@ -149,31 +311,103 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                         ) : (
                             <ToggleLeft className="h-5 w-5" />
                         )}
-                        <span>Cambios generales</span>
+                        <span>Modo general (varias pantallas)</span>
                     </button>
+                    <span className="text-xs text-muted-foreground">
+                        {isGeneralMode ? (
+                            <Select
+                                value={generalArea}
+                                onValueChange={(v) => setGeneralArea(v as GeneralArea)}
+                            >
+                                <SelectTrigger className="h-7 w-40 border-0 bg-transparent text-xs">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {generalAreas.map((area) => (
+                                        <SelectItem key={area} value={area} className="text-xs">
+                                            {generalAreaLabels[area]}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        ) : (
+                            currentSection
+                        )}
+                    </span>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                    {isGeneralMode ? (
-                        <Select
-                            value={generalArea}
-                            onValueChange={(v) => setGeneralArea(v as GeneralArea)}
-                        >
-                            <SelectTrigger className="h-7 w-32 border-0 bg-transparent text-xs">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {generalAreas.map((area) => (
-                                    <SelectItem key={area} value={area} className="text-xs">
-                                        {generalAreaLabels[area]}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    ) : (
-                        `${currentSection}`
-                    )}
-                </span>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    Activalo cuando el cambio aplica a mas de una seccion o ruta.
+                </p>
             </div>
+
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary/40 p-2">
+                <div className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1 text-xs">
+                    <Cpu className="h-3.5 w-3.5" />
+                    <span>Modelo</span>
+                    <Select
+                        value={modelPreference}
+                        onValueChange={(value) => setModelPreference(value as "default" | "gpt-5-mini")}
+                    >
+                        <SelectTrigger className="h-7 w-36 border-0 bg-transparent text-xs">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="default" className="text-xs">
+                                Default
+                            </SelectItem>
+                            <SelectItem value="gpt-5-mini" className="text-xs">
+                                GPT-5 mini
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => void handleImproveMessage()}
+                    disabled={!message.trim() || isSending || isImproving}
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    {isImproving ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                        <Wand2 className="h-3.5 w-3.5" />
+                    )}
+                    Mejorar mensaje
+                </button>
+
+                <button
+                    type="button"
+                    onClick={handleRevertImprove}
+                    disabled={originalMessageBeforeImprove === null || isSending || isImproving}
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Revertir
+                </button>
+            </div>
+
+            {(latestUsage || usageSummary) && (
+                <div className="mb-3 rounded-lg border border-border bg-secondary/30 p-2 text-xs text-muted-foreground">
+                    {latestUsage && (
+                        <p>
+                            Ultima llamada: in {latestUsage.promptTokens} | out {latestUsage.completionTokens} | total {latestUsage.totalTokens} | costo USD {latestUsage.estimatedCostUsd.toFixed(6)}
+                        </p>
+                    )}
+                    {usageSummary && (
+                        <>
+                            <p>
+                                Acumulado: {usageSummary.totals.eventCount} llamadas | tokens {usageSummary.totals.totalTokens} | costo USD {usageSummary.totals.estimatedCostUsd.toFixed(6)}
+                            </p>
+                            {usageSummary.byModel.length > 0 && (
+                                <p className="mt-1">
+                                    Por modelo: {usageSummary.byModel.map((item) => `${item.model} USD ${item.estimatedCostUsd.toFixed(6)}`).join(" | ")}
+                                </p>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
 
             {/* Screenshot checkbox */}
             <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
@@ -184,7 +418,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                     className="h-4 w-4 rounded border-input bg-secondary accent-primary"
                 />
                 <Camera className="h-4 w-4" />
-                <span>Incluir captura de pantalla después</span>
+                <span>Incluir captura de pantalla despues</span>
             </label>
 
             {/* Input area */}
@@ -193,18 +427,22 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Describe el problema o sugerencia..."
+                    placeholder={`Describe el problema o sugerencia. Ejemplo: ${currentContextToken} boton no responde`}
                     rows={2}
                     className="flex-1 resize-none rounded-lg border border-input bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 />
                 <button
                     type="button"
-                    onClick={handleSubmit}
-                    disabled={!message.trim()}
-                    className="flex h-auto items-center justify-center rounded-lg bg-primary px-4 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label="Enviar mensaje"
+                    onClick={() => void handleSubmit()}
+                    disabled={!message.trim() || isSending || isImproving}
+                    className="flex h-auto min-w-12 items-center justify-center rounded-lg bg-primary px-4 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label={isSending ? "Enviando" : "Enviar mensaje"}
                 >
-                    <Send className="h-5 w-5" />
+                    {isSending ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                        <Send className="h-5 w-5" />
+                    )}
                 </button>
             </div>
         </div>
