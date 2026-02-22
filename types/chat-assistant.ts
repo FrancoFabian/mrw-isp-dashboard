@@ -1,6 +1,12 @@
 import type { UserRole } from '@/types/roles'
 import type { RoleTag, TaskPriority, TaskType } from '@/types/task'
 
+export interface AssistantAttachmentInput {
+    mediaPath: string
+    mime: string
+    size: number
+}
+
 export interface AssistantChatRequest {
     message: string
     route: string
@@ -13,6 +19,7 @@ export interface AssistantChatRequest {
     userName?: string
     isGeneralMode: boolean
     modelPreference?: 'default' | 'gpt-5-mini'
+    attachments?: AssistantAttachmentInput[]
 }
 
 export interface AssistantUsageMetrics {
@@ -77,4 +84,17 @@ export interface UsageSummaryResponse {
     currency: 'USD' | string
     totals: UsageTotalsSummary
     byModel: UsageByModelSummary[]
+}
+
+export interface MediaUploadResponse {
+    mediaPath: string
+    url: string
+    mime: string
+    size: number
+}
+
+export interface MediaCapabilitiesResponse {
+    enabled: boolean
+    maxUploadMb: number
+    publicPath: string
 }

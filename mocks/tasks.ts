@@ -18,6 +18,16 @@ export const mockTasks: TaskItem[] = [
         status: 'OPEN',
         author: { kind: 'CLIENT_USER', name: 'Carlos Martinez' },
         includeScreenshotLater: true,
+        attachments: [
+            {
+                id: 'ATT-MOCK-001',
+                taskId: 'TASK-ABC123',
+                mediaPath: 'u/2026/02/mock-portal-pago.png',
+                mimeType: 'image/png',
+                sizeBytes: 184320,
+                createdAt: '2026-02-05T14:35:00Z',
+            },
+        ],
         devNotes: [],
     },
     {

@@ -23,6 +23,15 @@ export interface TaskDevNote {
     text: string
 }
 
+export interface TaskAttachment {
+    id: string
+    taskId: string
+    mediaPath: string
+    mimeType: string
+    sizeBytes: number
+    createdAt: string
+}
+
 export interface TaskItem {
     id: string
     createdAt: string
@@ -36,6 +45,7 @@ export interface TaskItem {
     status: TaskStatus
     author: { kind: 'CLIENT_USER'; name?: string }
     includeScreenshotLater?: boolean
+    attachments?: TaskAttachment[]
     devNotes?: TaskDevNote[]
 }
 

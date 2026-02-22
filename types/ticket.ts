@@ -24,6 +24,13 @@ export interface Ticket {
   lastCustomerReplyAt?: string
   lastAgentReplyAt?: string
   slaBreachedAt?: string
+  visualAttachments?: Array<{
+    id: string
+    mediaPath: string
+    mimeType: string
+    sizeBytes: number
+    createdAt: string
+  }>
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -148,4 +155,3 @@ export const ticketEventTypeLabels: Record<TicketEventType, string> = {
   sla_breached: "SLA incumplido",
   attachment_added: "Archivo adjunto",
 }
-

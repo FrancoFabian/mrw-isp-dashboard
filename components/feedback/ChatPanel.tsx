@@ -6,6 +6,7 @@ import { useChat } from "@/stores/chat-context"
 import { cn } from "@/lib/utils"
 import { MessageComposer } from "./MessageComposer"
 import { TaskChip } from "./TaskChip"
+import { buildMediaUrl } from "@/helpers/media"
 import { SessionList } from "./SessionList"
 import {
     buildContextToken,
@@ -157,6 +158,26 @@ export function ChatPanel({ role, pathname, userName }: ChatPanelProps) {
                                     )}
                                 >
                                     <p className="whitespace-pre-wrap">{message.text}</p>
+                                    {message.attachments && message.attachments.length > 0 && (
+                                        <div className="mt-2 grid grid-cols-2 gap-2">
+                                            {message.attachments.map((attachment) => (
+                                                <a
+                                                    key={`${message.id}-${attachment.mediaPath}`}
+                                                    href={attachment.url ?? buildMediaUrl(attachment.mediaPath)}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="block overflow-hidden rounded-md border border-border/40"
+                                                >
+                                                    <img
+                                                        src={attachment.url ?? buildMediaUrl(attachment.mediaPath)}
+                                                        alt="Adjunto"
+                                                        className="h-24 w-full object-cover"
+                                                        loading="lazy"
+                                                    />
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 {message.taskId && (
                                     <div className="mt-1">

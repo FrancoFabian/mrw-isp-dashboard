@@ -12,8 +12,13 @@ import {
 } from "react"
 import { deriveTitleFromMessage } from "@/helpers/deriveTitleFromMessage"
 import type { ChatMessage, ChatSession } from "@/types/chat"
-import { mockChatSessions } from "@/mocks/chatSessions"
 import { feedbackWelcomeText } from "@/mocks/chatMessages"
+import {
+    appendChatMessage,
+    clearChatSessionMessages,
+    createChatSession,
+    requestChatSessions,
+} from "@/lib/chat/history-client"
 
 interface ChatContextValue {
     sessions: ChatSession[]
@@ -35,6 +40,14 @@ interface PersistedChatState {
 const ChatContext = createContext<ChatContextValue | null>(null)
 const CHAT_STORAGE_KEY = "isp.feedback-chat.sessions.v1"
 const DEFAULT_SESSION_TITLE = "New Session"
+const LEGACY_MOCK_SESSION_IDS = new Set([
+    "SES-001",
+    "SES-002",
+    "SES-003",
+    "SES-004",
+    "SES-005",
+    "SES-006",
+])
 
 function generateId(prefix: string): string {
     const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase()
@@ -70,6 +83,14 @@ function buildSession(): ChatSession {
     }
 }
 
+function createInitialChatState(): PersistedChatState {
+    const firstSession = buildSession()
+    return {
+        sessions: [firstSession],
+        activeSessionId: firstSession.id,
+    }
+}
+
 function isChatMessage(value: unknown): value is ChatMessage {
     if (!value || typeof value !== "object") return false
     const message = value as Record<string, unknown>
@@ -101,15 +122,26 @@ function readPersistedState(): PersistedChatState | null {
             return null
         }
 
+        const sanitizedSessions = parsed.sessions.filter(
+            (session) => !LEGACY_MOCK_SESSION_IDS.has(session.id)
+        )
+        if (sanitizedSessions.length === 0) {
+            return null
+        }
+
         const activeSessionId = typeof parsed.activeSessionId === "string"
             ? parsed.activeSessionId
-            : parsed.sessions[0]?.id
+            : sanitizedSessions[0]?.id
 
         if (!activeSessionId) return null
 
+        const resolvedActiveSessionId = sanitizedSessions.some((session) => session.id === activeSessionId)
+            ? activeSessionId
+            : sanitizedSessions[0].id
+
         return {
-            sessions: parsed.sessions,
-            activeSessionId,
+            sessions: sanitizedSessions,
+            activeSessionId: resolvedActiveSessionId,
         }
     } catch {
         return null
@@ -117,8 +149,12 @@ function readPersistedState(): PersistedChatState | null {
 }
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-    const [sessions, setSessions] = useState<ChatSession[]>(mockChatSessions)
-    const [activeSessionId, setActiveSessionId] = useState<string>(mockChatSessions[0]?.id ?? "")
+    const initialStateRef = useRef<PersistedChatState | null>(null)
+    if (!initialStateRef.current) {
+        initialStateRef.current = createInitialChatState()
+    }
+    const [sessions, setSessions] = useState<ChatSession[]>(initialStateRef.current.sessions)
+    const [activeSessionId, setActiveSessionId] = useState<string>(initialStateRef.current.activeSessionId)
     const [hydrated, setHydrated] = useState(false)
 
     // Deduplicate route-context messages per session.
@@ -132,12 +168,49 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const messages = activeSession?.messages ?? []
 
     useEffect(() => {
+        let active = true
         const persisted = readPersistedState()
         if (persisted) {
             setSessions(persisted.sessions)
             setActiveSessionId(persisted.activeSessionId)
         }
-        setHydrated(true)
+
+        const bootstrap = async () => {
+            try {
+                const remoteSessions = await requestChatSessions()
+                if (!active) return
+
+                if (remoteSessions.length > 0) {
+                    setSessions(remoteSessions)
+                    setActiveSessionId((prev) =>
+                        remoteSessions.some((session) => session.id === prev)
+                            ? prev
+                            : remoteSessions[0].id
+                    )
+                    return
+                }
+
+                const fallbackSession = persisted?.sessions[0] ?? createInitialChatState().sessions[0]
+                const created = await createChatSession({
+                    sessionId: fallbackSession.id,
+                    title: fallbackSession.title,
+                })
+                if (!active) return
+                setSessions([created])
+                setActiveSessionId(created.id)
+            } catch {
+                // Keep local fallback when history API is unavailable.
+            } finally {
+                if (active) {
+                    setHydrated(true)
+                }
+            }
+        }
+
+        void bootstrap()
+        return () => {
+            active = false
+        }
     }, [])
 
     useEffect(() => {
@@ -177,11 +250,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setSessions((prev) => [newSession, ...prev])
         setActiveSessionId(newSession.id)
         contextMessageKeysRef.current.set(newSession.id, new Set<string>())
+        void createChatSession({ sessionId: newSession.id, title: newSession.title })
+            .then((remoteSession) => {
+                setSessions((prev) => {
+                    const withoutLocal = prev.filter((session) => session.id !== newSession.id)
+                    return [remoteSession, ...withoutLocal]
+                })
+                setActiveSessionId(remoteSession.id)
+            })
+            .catch(() => {
+                // Keep local optimistic session if API is unavailable.
+            })
         return newSession
     }, [])
 
     const addMessage = useCallback((message: Omit<ChatMessage, 'id' | 'createdAt'>): ChatMessage => {
         const newMessage = buildMessage(message)
+        const canPersistToApi = Boolean(activeSessionId && sessions.some((session) => session.id === activeSessionId))
 
         setSessions((prev) => {
             const hasActiveSession = prev.some((session) => session.id === activeSessionId)
@@ -219,8 +304,38 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             })
         })
 
+        if (canPersistToApi && activeSessionId) {
+            void appendChatMessage(activeSessionId, {
+                messageId: newMessage.id,
+                sender: newMessage.sender,
+                text: newMessage.text,
+                taskId: newMessage.taskId,
+                attachments: newMessage.attachments,
+            })
+                .then((remoteMessage) => {
+                    setSessions((prev) =>
+                        prev.map((session) => {
+                            if (session.id !== activeSessionId) {
+                                return session
+                            }
+                            const exists = session.messages.some((item) => item.id === remoteMessage.id)
+                            return {
+                                ...session,
+                                messages: exists
+                                    ? session.messages.map((item) => item.id === remoteMessage.id ? remoteMessage : item)
+                                    : [...session.messages, remoteMessage],
+                                updatedAt: remoteMessage.createdAt,
+                            }
+                        })
+                    )
+                })
+                .catch(() => {
+                    // Keep local optimistic message if API is unavailable.
+                })
+        }
+
         return newMessage
-    }, [activeSessionId])
+    }, [activeSessionId, sessions])
 
     const addContextMessage = useCallback((contextKey: string, text: string): ChatMessage | null => {
         if (!activeSessionId || !sessions.some((session) => session.id === activeSessionId)) {
@@ -252,6 +367,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             )
         )
 
+        void appendChatMessage(activeSessionId, {
+            messageId: newMessage.id,
+            sender: "BOT",
+            text,
+        }).catch(() => {
+            // Keep local context message if API is unavailable.
+        })
+
         return newMessage
     }, [activeSessionId, sessions])
 
@@ -271,6 +394,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                     : session
             )
         )
+
+        void clearChatSessionMessages(activeSessionId)
+            .then((remoteSession) => {
+                setSessions((prev) =>
+                    prev.map((session) => session.id === activeSessionId ? remoteSession : session)
+                )
+            })
+            .catch(() => {
+                // Keep local clear state if API is unavailable.
+            })
     }, [activeSessionId, sessions])
 
     return (

@@ -1,5 +1,5 @@
 import type { UserRole } from '@/types/roles'
-import type { TaskItem, TaskType, TaskPriority, RoleTag } from '@/types/task'
+import type { TaskItem, TaskType, TaskPriority, RoleTag, TaskAttachment } from '@/types/task'
 import type { GeneralArea } from '@/types/feedback'
 import { parseContextToken, routeToSection, userRoleToRoleTag } from './routeToSection'
 import { deriveTitleFromMessage } from './deriveTitleFromMessage'
@@ -11,6 +11,11 @@ interface CreateTaskOptions {
     type: TaskType
     priority: TaskPriority
     includeScreenshotLater?: boolean
+    attachments?: Array<{
+        mediaPath: string
+        mimeType: string
+        sizeBytes: number
+    }>
     isGeneralMode: boolean
     generalArea?: GeneralArea
     authorName?: string
@@ -27,6 +32,7 @@ export function createTaskFromMessage(options: CreateTaskOptions): TaskItem {
         type,
         priority,
         includeScreenshotLater = false,
+        attachments = [],
         isGeneralMode,
         generalArea = 'General',
         authorName,
@@ -54,6 +60,15 @@ export function createTaskFromMessage(options: CreateTaskOptions): TaskItem {
     // Add random suffix to avoid collisions when multiple tasks are created in one tick.
     const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase()
     const id = `TASK-${Date.now().toString(36).toUpperCase()}-${randomSuffix}`
+    const nowAttachment = new Date().toISOString()
+    const mappedAttachments: TaskAttachment[] = attachments.map((attachment) => ({
+        id: `ATT-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+        taskId: id,
+        mediaPath: attachment.mediaPath,
+        mimeType: attachment.mimeType,
+        sizeBytes: attachment.sizeBytes,
+        createdAt: nowAttachment,
+    }))
 
     return {
         id,
@@ -71,6 +86,7 @@ export function createTaskFromMessage(options: CreateTaskOptions): TaskItem {
             name: authorName,
         },
         includeScreenshotLater,
+        attachments: mappedAttachments,
         devNotes: [],
     }
 }

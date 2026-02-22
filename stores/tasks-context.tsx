@@ -17,6 +17,7 @@ interface TasksContextValue {
     updateTaskPriority: (taskId: string, priority: TaskPriority) => void
     updateTaskType: (taskId: string, type: TaskType) => void
     addDevNote: (taskId: string, note: Omit<TaskDevNote, 'id' | 'createdAt'>) => void
+    removeTaskAttachment: (taskId: string, attachmentId: string) => void
     getTaskById: (taskId: string) => TaskItem | undefined
 }
 
@@ -72,6 +73,19 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         []
     )
 
+    const removeTaskAttachment = useCallback((taskId: string, attachmentId: string) => {
+        setTasks((prev) =>
+            prev.map((task) =>
+                task.id === taskId
+                    ? {
+                        ...task,
+                        attachments: (task.attachments ?? []).filter((attachment) => attachment.id !== attachmentId),
+                    }
+                    : task
+            )
+        )
+    }, [])
+
     const getTaskById = useCallback(
         (taskId: string) => tasks.find((t) => t.id === taskId),
         [tasks]
@@ -86,6 +100,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
                 updateTaskPriority,
                 updateTaskType,
                 addDevNote,
+                removeTaskAttachment,
                 getTaskById,
             }}
         >

@@ -22,7 +22,9 @@ import {
     ChevronRight,
     LifeBuoy,
     Clock,
+    Image as ImageIcon,
 } from "lucide-react"
+import { buildMediaUrl } from "@/helpers/media"
 
 // Board columns mapping ticket statuses
 const COLUMNS: { id: string; title: string; statuses: TicketStatus[]; color: string }[] = [
@@ -48,6 +50,7 @@ export default function KanbanBoardPage() {
     const [categoryFilter, setCategoryFilter] = useState<TicketCategory | "all">("all")
     const [draggingId, setDraggingId] = useState<string | null>(null)
     const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+    const [previewMediaPath, setPreviewMediaPath] = useState<string | null>(null)
 
     // Filter tickets
     const filteredTickets = useMemo(() => {
@@ -99,6 +102,27 @@ export default function KanbanBoardPage() {
             )
         )
         setDraggingId(null)
+    }
+
+    const handleRemoveVisualAttachment = (ticketId: string, attachmentId: string) => {
+        setTickets((prev) =>
+            prev.map((ticket) =>
+                ticket.id === ticketId
+                    ? {
+                        ...ticket,
+                        visualAttachments: (ticket.visualAttachments ?? []).filter((att) => att.id !== attachmentId),
+                    }
+                    : ticket
+            )
+        )
+        setSelectedTicket((prev) =>
+            prev && prev.id === ticketId
+                ? {
+                    ...prev,
+                    visualAttachments: (prev.visualAttachments ?? []).filter((att) => att.id !== attachmentId),
+                }
+                : prev
+        )
     }
 
     // SLA check
@@ -371,6 +395,44 @@ export default function KanbanBoardPage() {
                                     <span className="text-sm text-amber-400">SLA en riesgo</span>
                                 </div>
                             )}
+
+                            <div>
+                                <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
+                                    <ImageIcon className="h-3 w-3" />
+                                    Referencias visuales
+                                </h4>
+                                {(selectedTicket.visualAttachments ?? []).length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">Sin referencias visuales.</p>
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {(selectedTicket.visualAttachments ?? []).map((attachment) => (
+                                            <div key={attachment.id} className="space-y-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPreviewMediaPath(attachment.mediaPath)}
+                                                    className="block overflow-hidden rounded border border-border/60"
+                                                >
+                                                    <img
+                                                        src={buildMediaUrl(attachment.mediaPath)}
+                                                        alt="Referencia visual"
+                                                        className="h-20 w-full object-cover"
+                                                        loading="lazy"
+                                                    />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        handleRemoveVisualAttachment(selectedTicket.id, attachment.id)
+                                                    }
+                                                    className="text-[10px] text-destructive hover:underline"
+                                                >
+                                                    Eliminar
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Actions */}
@@ -384,6 +446,23 @@ export default function KanbanBoardPage() {
                             </a>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {previewMediaPath && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4">
+                    <button
+                        type="button"
+                        onClick={() => setPreviewMediaPath(null)}
+                        className="absolute right-4 top-4 rounded-full bg-background p-2 text-foreground"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                    <img
+                        src={buildMediaUrl(previewMediaPath)}
+                        alt="Vista previa"
+                        className="max-h-[85vh] max-w-[85vw] rounded-lg object-contain"
+                    />
                 </div>
             )}
         </div>

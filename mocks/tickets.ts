@@ -13,6 +13,15 @@ export const mockTickets: Ticket[] = [
     channel: "portal",
     createdAt: "2026-02-06T14:30:00",
     updatedAt: "2026-02-06T14:30:00",
+    visualAttachments: [
+      {
+        id: "TVA-001",
+        mediaPath: "u/2026/02/mock-ticket-001.png",
+        mimeType: "image/png",
+        sizeBytes: 164320,
+        createdAt: "2026-02-06T14:35:00",
+      },
+    ],
   },
   {
     id: "TKT-002",
@@ -307,4 +316,3 @@ export const getTicketsByStatus = (status: string) =>
 
 export const getTicketsByAssignee = (staffId: string) =>
   mockTickets.filter((t) => t.assignedToId === staffId)
-
