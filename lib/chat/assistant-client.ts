@@ -5,15 +5,16 @@ import type {
     ImproveMessageResponse,
     UsageSummaryResponse,
 } from '@/types/chat-assistant'
+import { ApiRequestError } from '@/lib/chat/request-error'
 
 interface ApiErrorPayload {
     error?: string
     message?: string
 }
 
-function buildApiError(status: number, payload: ApiErrorPayload | null): Error {
+function buildApiError(status: number, payload: ApiErrorPayload | null): ApiRequestError {
     const detail = payload?.message ?? payload?.error ?? `status ${status}`
-    return new Error(`Feedback chat API responded with ${detail}`)
+    return new ApiRequestError(`Feedback chat API responded with ${detail}`, 'http', status)
 }
 
 async function parseErrorPayload(response: Response): Promise<ApiErrorPayload | null> {
@@ -27,13 +28,18 @@ async function parseErrorPayload(response: Response): Promise<ApiErrorPayload | 
 export async function requestAssistantReply(
     payload: AssistantChatRequest
 ): Promise<AssistantChatResponse> {
-    const response = await fetch('/api/feedback-chat', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-    })
+    let response: Response
+    try {
+        response = await fetch('/api/feedback-chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        })
+    } catch {
+        throw new ApiRequestError('Unable to reach feedback chat API', 'network')
+    }
 
     if (!response.ok) {
         throw buildApiError(response.status, await parseErrorPayload(response))
@@ -45,13 +51,18 @@ export async function requestAssistantReply(
 export async function requestImprovedMessage(
     payload: ImproveMessageRequest
 ): Promise<ImproveMessageResponse> {
-    const response = await fetch('/api/feedback-chat/improve-message', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-    })
+    let response: Response
+    try {
+        response = await fetch('/api/feedback-chat/improve-message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        })
+    } catch {
+        throw new ApiRequestError('Unable to reach improve-message API', 'network')
+    }
 
     if (!response.ok) {
         throw buildApiError(response.status, await parseErrorPayload(response))
@@ -61,12 +72,17 @@ export async function requestImprovedMessage(
 }
 
 export async function requestUsageSummary(): Promise<UsageSummaryResponse> {
-    const response = await fetch('/api/feedback-chat/usage-summary', {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    })
+    let response: Response
+    try {
+        response = await fetch('/api/feedback-chat/usage-summary', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+    } catch {
+        throw new ApiRequestError('Unable to reach usage-summary API', 'network')
+    }
 
     if (!response.ok) {
         throw buildApiError(response.status, await parseErrorPayload(response))

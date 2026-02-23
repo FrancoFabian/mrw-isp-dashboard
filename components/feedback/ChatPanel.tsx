@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useEffect, useState } from "react"
-import { History, MessageSquarePlus, MessagesSquare } from "lucide-react"
+import { History, MessageSquarePlus, MessagesSquare, TriangleAlert, X } from "lucide-react"
 import { useChat } from "@/stores/chat-context"
 import { cn } from "@/lib/utils"
 import { MessageComposer } from "./MessageComposer"
@@ -30,6 +30,11 @@ export function ChatPanel({ role, pathname, userName }: ChatPanelProps) {
         activeSession,
         activeSessionId,
         messages,
+        isLoading,
+        isMutating,
+        canCreateSession,
+        connectionMessage,
+        dismissConnectionMessage,
         setActiveSession,
         createSession,
         addContextMessage,
@@ -56,7 +61,7 @@ export function ChatPanel({ role, pathname, userName }: ChatPanelProps) {
         }
 
         const contextKey = `${activeSessionId}:${role}:${pathname}:${currentSection}`
-        addContextMessage(
+        void addContextMessage(
             contextKey,
             [
                 `Contexto activo`,
@@ -67,9 +72,11 @@ export function ChatPanel({ role, pathname, userName }: ChatPanelProps) {
         )
     }, [addContextMessage, activeSessionId, role, pathname, currentSection, contextToken])
 
-    const handleCreateSession = () => {
-        createSession()
-        setPanelView("CHAT")
+    const handleCreateSession = async () => {
+        const created = await createSession()
+        if (created) {
+            setPanelView("CHAT")
+        }
     }
 
     const handleSelectSession = (sessionId: string) => {
@@ -80,6 +87,21 @@ export function ChatPanel({ role, pathname, userName }: ChatPanelProps) {
     return (
         <div className="flex flex-1 flex-col overflow-hidden">
             <div className="border-b border-border px-3 py-2">
+                {connectionMessage && (
+                    <div className="mb-2 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                        <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span className="flex-1">{connectionMessage}</span>
+                        <button
+                            type="button"
+                            onClick={dismissConnectionMessage}
+                            className="rounded-sm p-0.5 text-destructive/80 hover:bg-destructive/15"
+                            aria-label="Cerrar aviso"
+                        >
+                            <X className="h-3 w-3" />
+                        </button>
+                    </div>
+                )}
+
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1 rounded-md bg-secondary/70 p-1">
                         <button
@@ -112,8 +134,9 @@ export function ChatPanel({ role, pathname, userName }: ChatPanelProps) {
 
                     <button
                         type="button"
-                        onClick={handleCreateSession}
-                        className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary"
+                        onClick={() => void handleCreateSession()}
+                        disabled={!canCreateSession || isMutating || isLoading}
+                        className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <MessageSquarePlus className="h-3.5 w-3.5" />
                         New
@@ -132,14 +155,15 @@ export function ChatPanel({ role, pathname, userName }: ChatPanelProps) {
                     sessions={sessions}
                     activeSessionId={activeSessionId}
                     onSelectSession={handleSelectSession}
-                    onCreateSession={handleCreateSession}
+                    onCreateSession={() => void handleCreateSession()}
+                    disableCreateSession={!canCreateSession || isMutating || isLoading}
                 />
             ) : (
                 <>
                     {/* Messages area */}
                     <div
                         ref={scrollRef}
-                        className="flex-1 space-y-4 overflow-y-auto p-4"
+                        className="feedback-scroll flex-1 space-y-4 overflow-y-auto p-4"
                     >
                         {messages.map((message) => (
                             <div
@@ -192,6 +216,12 @@ export function ChatPanel({ role, pathname, userName }: ChatPanelProps) {
                                 </span>
                             </div>
                         ))}
+
+                        {!isLoading && messages.length === 0 && (
+                            <p className="text-center text-xs text-muted-foreground">
+                                Sin sesion activa. Crea una sesion cuando el servidor este disponible.
+                            </p>
+                        )}
                     </div>
 
                     {/* Composer */}

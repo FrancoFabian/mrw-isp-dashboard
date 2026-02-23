@@ -18,7 +18,6 @@ import {
     AlertTriangle,
     ToggleLeft,
     ToggleRight,
-    Camera,
     Loader2,
     Hash,
     Wand2,
@@ -27,7 +26,9 @@ import {
     ImagePlus,
     X,
     RefreshCw,
-    TriangleAlert,
+    CircleHelp,
+    ChevronUp,
+    ChevronDown,
 } from "lucide-react"
 import { useChat } from "@/stores/chat-context"
 import { useTasks } from "@/stores/tasks-context"
@@ -39,7 +40,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { buildConnectionMessage, isBackendUnavailableMessage } from "@/lib/chat/request-error"
 import {
     requestAssistantReply,
     requestImprovedMessage,
@@ -51,7 +55,6 @@ import type { TaskType, TaskPriority } from "@/types/task"
 import type { GeneralArea } from "@/types/feedback"
 import type { AssistantUsageMetrics, MediaUploadResponse, UsageSummaryResponse } from "@/types/chat-assistant"
 import { generalAreas, generalAreaLabels } from "@/types/feedback"
-import { taskTypeLabels, taskPriorityLabels, roleTagLabels } from "@/types/task"
 import {
     buildContextToken,
     routeToSection,
@@ -105,26 +108,25 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     const [priority, setPriority] = useState<TaskPriority>("MEDIUM")
     const [isGeneralMode, setIsGeneralMode] = useState(false)
     const [generalArea, setGeneralArea] = useState<GeneralArea>("General")
-    const [includeScreenshot, setIncludeScreenshot] = useState(false)
     const [isSending, setIsSending] = useState(false)
     const [isImproving, setIsImproving] = useState(false)
     const [originalMessageBeforeImprove, setOriginalMessageBeforeImprove] = useState<string | null>(null)
+    const [contextMenuCollapsed, setContextMenuCollapsed] = useState(false)
     const [modelPreference, setModelPreference] = useState<"default" | "gpt-5-mini">("default")
     const [latestUsage, setLatestUsage] = useState<AssistantUsageMetrics | null>(null)
     const [usageSummary, setUsageSummary] = useState<UsageSummaryResponse | null>(null)
 
-    const [attachmentsEnabled, setAttachmentsEnabled] = useState(false)
     const [mediaReady, setMediaReady] = useState(false)
     const [mediaChecking, setMediaChecking] = useState(false)
-    const [mediaError, setMediaError] = useState<string | null>(null)
     const [attachments, setAttachments] = useState<ComposerAttachment[]>([])
     const [isDragging, setIsDragging] = useState(false)
+    const [submitError, setSubmitError] = useState<string | null>(null)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
     const attachmentsRef = useRef<ComposerAttachment[]>([])
 
-    const { addMessage } = useChat()
-    const { addTask } = useTasks()
+    const { addMessage, canCreateSession, connectionMessage } = useChat()
+    const { addTask, errorMessage: tasksError } = useTasks()
 
     const currentSection = routeToSection(pathname, role)
     const currentRoleTag = userRoleToRoleTag(role)
@@ -136,6 +138,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
         () => attachments.filter((item) => item.status === "uploading").length,
         [attachments]
     )
+    const hasImageAttachments = attachments.length > 0
 
     const refreshUsageSummary = useCallback(async () => {
         try {
@@ -163,13 +166,8 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     }, [])
 
     useEffect(() => {
-        if (!attachmentsEnabled || mediaReady || mediaChecking) {
-            return
-        }
-
         let active = true
         setMediaChecking(true)
-        setMediaError(null)
 
         void requestMediaCapabilities()
             .then((capabilities) => {
@@ -178,8 +176,6 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                 }
                 if (!capabilities.enabled) {
                     setMediaReady(false)
-                    setAttachmentsEnabled(false)
-                    setMediaError("El backend no tiene habilitado el upload de imagenes")
                     return
                 }
                 setMediaReady(true)
@@ -189,8 +185,6 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                     return
                 }
                 setMediaReady(false)
-                setAttachmentsEnabled(false)
-                setMediaError("No se pudo validar soporte de imagenes en backend")
             })
             .finally(() => {
                 if (active) {
@@ -201,7 +195,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
         return () => {
             active = false
         }
-    }, [attachmentsEnabled, mediaReady, mediaChecking])
+    }, [])
 
     const updateAttachment = useCallback((id: string, updater: (item: ComposerAttachment) => ComposerAttachment) => {
         setAttachments((prev) => prev.map((item) => (item.id === id ? updater(item) : item)))
@@ -226,7 +220,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     }, [updateAttachment])
 
     const queueFiles = useCallback((files: File[]) => {
-        if (!attachmentsEnabled || !mediaReady || files.length === 0) {
+        if (!mediaReady || files.length === 0) {
             return
         }
 
@@ -254,10 +248,10 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
         for (const item of toUpload) {
             void uploadAttachment(item)
         }
-    }, [attachments.length, attachmentsEnabled, mediaReady, uploadAttachment])
+    }, [attachments.length, mediaReady, uploadAttachment])
 
     const handleFilePicker = () => {
-        if (!attachmentsEnabled || !mediaReady) {
+        if (!mediaReady) {
             return
         }
         fileInputRef.current?.click()
@@ -289,7 +283,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     }
 
     const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-        if (!attachmentsEnabled || !mediaReady) {
+        if (!mediaReady) {
             return
         }
         const files: File[] = []
@@ -307,8 +301,8 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
         }
     }
 
-    const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-        if (!attachmentsEnabled || !mediaReady) {
+    const handleDragOver = (event: DragEvent<HTMLElement>) => {
+        if (!mediaReady) {
             return
         }
         if (!Array.from(event.dataTransfer.types).includes("Files")) {
@@ -322,8 +316,8 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
         setIsDragging(false)
     }
 
-    const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-        if (!attachmentsEnabled || !mediaReady) {
+    const handleDrop = (event: DragEvent<HTMLElement>) => {
+        if (!mediaReady) {
             return
         }
         event.preventDefault()
@@ -334,8 +328,12 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     const handleSubmit = async () => {
         const trimmed = message.trim()
         if (!trimmed || isSending || isImproving || uploadingCount > 0) return
+        if (!canCreateSession) {
+            return
+        }
 
         setIsSending(true)
+        setSubmitError(null)
 
         const uploadedAttachments = attachments
             .filter((item) => item.status === "success" && item.upload)
@@ -347,7 +345,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
             pathname,
             type: taskType,
             priority,
-            includeScreenshotLater: includeScreenshot,
+            includeScreenshotLater: false,
             attachments: uploadedAttachments.map((attachment) => ({
                 mediaPath: attachment.mediaPath,
                 mimeType: attachment.mime,
@@ -358,9 +356,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
             authorName: userName,
         })
 
-        addTask(task)
-
-        addMessage({
+        const persistedUserMessage = await addMessage({
             sender: "USER",
             text: trimmed,
             taskId: task.id,
@@ -370,24 +366,16 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                 sizeBytes: attachment.sizeBytes,
             })),
         })
-
-        const fallbackLocationText = isGeneralMode
-            ? `GENERAL / ${generalAreaLabels[generalArea]}`
-            : `${roleTagLabels[task.roleTag]} / ${task.sectionTag}`
-        const fallbackContextToken = buildContextToken(task.roleTag, task.sectionTag)
-
-        const fallbackReply = [
-            `Listo. Registre tu ${taskTypeLabels[taskType].toLowerCase()} en ${fallbackLocationText}.`,
-            `Ruta: ${task.route}`,
-            `ID: ${task.id} | Prioridad: ${taskPriorityLabels[priority]}`,
-            `Tip: para mayor precision usa ${fallbackContextToken}. Ejemplo: #Clients/pagos.`,
-        ].join("\n")
+        if (!persistedUserMessage) {
+            setSubmitError("No se pudo enviar el mensaje al servidor.")
+            setIsSending(false)
+            return
+        }
 
         setMessage("")
         setOriginalMessageBeforeImprove(null)
         setTaskType("OTHER")
         setPriority("MEDIUM")
-        setIncludeScreenshot(false)
         for (const item of attachments) {
             URL.revokeObjectURL(item.previewUrl)
         }
@@ -417,15 +405,18 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                 setLatestUsage(assistantResponse.usage)
             }
             await refreshUsageSummary()
+            await addTask(task.id)
 
-            addMessage({
+            await addMessage({
                 sender: "BOT",
                 text: assistantResponse.reply,
             })
-        } catch {
-            addMessage({
+        } catch (error) {
+            const connectivityMessage = buildConnectionMessage(error)
+            setSubmitError(connectivityMessage)
+            await addMessage({
                 sender: "BOT",
-                text: fallbackReply,
+                text: connectivityMessage,
             })
         } finally {
             setIsSending(false)
@@ -493,169 +484,182 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
             void handleSubmit()
         }
     }
+    const composerErrorCandidates: Array<string | null> = [
+        submitError,
+        connectionMessage,
+        tasksError,
+    ]
+    const composerErrorMessage = composerErrorCandidates.find((candidate) => (
+        candidate !== null && !isBackendUnavailableMessage(candidate)
+    )) ?? null
 
     return (
         <div
             className={cn(
-                "border-t border-border bg-background p-4",
+                "bg-background p-4",
                 isDragging && "ring-2 ring-primary/60"
             )}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
-            <div className="mb-3 rounded-lg border border-border bg-secondary/40 p-3">
-                <div className="flex items-center justify-between gap-3">
-                    <div className="space-y-1">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Contexto detectado
-                        </p>
-                        <p className="text-xs text-foreground">
-                            Seccion: {isGeneralMode ? generalAreaLabels[generalArea] : currentSection}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Ruta: {pathname}</p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={handleInsertContextToken}
-                        className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary"
-                    >
-                        <Hash className="h-3.5 w-3.5" />
-                        {currentContextToken}
-                    </button>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                    Tip: puedes citar contexto manual con etiquetas como #Clients/pagos.
-                </p>
+            <div className="-mt-2 mb-4 flex items-center gap-2">
+                <span className="h-px flex-1 bg-border/80" />
+                <TooltipProvider delayDuration={120}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onClick={() => setContextMenuCollapsed((prev) => !prev)}
+                                className="relative z-10 -translate-y-1 inline-flex h-7 items-center gap-1 rounded-full border border-border bg-secondary/50 px-3 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label={contextMenuCollapsed ? "Mostrar menu de contexto" : "Ocultar menu de contexto"}
+                            >
+                                {contextMenuCollapsed ? (
+                                    <ChevronUp className="h-3.5 w-3.5" />
+                                ) : (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                )}
+                                Contexto
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" align="center" className="max-w-72">
+                            {contextMenuCollapsed
+                                ? "Muestra nuevamente el menu de contexto."
+                                : "Oculta el menu de contexto para enfocarte en el mensaje."}
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+                <span className="h-px flex-1 bg-border/80" />
             </div>
 
-            <div className="mb-3 flex flex-wrap gap-2">
+            <div
+                className={cn(
+                    "relative z-0 origin-top overflow-hidden transition-all duration-300 ease-out",
+                    contextMenuCollapsed
+                        ? "max-h-0 -translate-y-6 opacity-0 pointer-events-none -mb-3"
+                        : "max-h-[320px] translate-y-0 opacity-100 mb-3"
+                )}
+            >
+                <div className="rounded-lg border border-border bg-secondary/40 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Contexto detectado
+                            </p>
+                            <p className="text-xs text-foreground">
+                                Seccion: {isGeneralMode ? generalAreaLabels[generalArea] : currentSection}
+                            </p>
+                            <p className="text-xs text-muted-foreground">Ruta: {pathname}</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleInsertContextToken}
+                            className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary"
+                        >
+                            <Hash className="h-3.5 w-3.5" />
+                            {currentContextToken}
+                        </button>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        Tip: puedes citar contexto manual con etiquetas como #Clients/pagos.
+                    </p>
+                    <div className="mt-3 border-t border-border/70 pt-2">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsGeneralMode(!isGeneralMode)}
+                                    className="flex h-7 items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                                >
+                                    <span className="inline-flex h-7 w-7 items-center justify-center">
+                                        {isGeneralMode ? (
+                                            <ToggleRight className="h-6 w-6 text-primary" />
+                                        ) : (
+                                            <ToggleLeft className="h-6 w-6" />
+                                        )}
+                                    </span>
+                                    <span>Modo general</span>
+                                </button>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <button
+                                            type="button"
+                                            className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-foreground"
+                                            aria-label="Ayuda modo general"
+                                        >
+                                            <CircleHelp className="h-3.5 w-3.5" />
+                                        </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent side="bottom" align="start" className="w-72 p-3 text-sm">
+                                        Activalo cuando el cambio aplica a mas de una seccion o ruta.
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                            <div className="h-7 min-w-[120px] text-xs text-muted-foreground">
+                                {isGeneralMode ? (
+                                    <Select
+                                        value={generalArea}
+                                        onValueChange={(v) => setGeneralArea(v as GeneralArea)}
+                                    >
+                                        <SelectTrigger className="h-7 w-40 border-0 bg-transparent text-xs">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {generalAreas.map((area) => (
+                                                <SelectItem key={area} value={area} className="text-xs">
+                                                    {generalAreaLabels[area]}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <span className="inline-flex h-7 items-center">{currentSection}</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="relative z-10 mb-3 flex flex-wrap gap-2">
                 <button
                     type="button"
                     onClick={() => setTaskType("BUG")}
                     className={cn(
-                        "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                        "flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors",
                         taskType === "BUG"
                             ? "bg-destructive/20 text-destructive"
                             : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                     )}
                 >
-                    <Bug className="h-3.5 w-3.5" />
+                    <Bug className="h-3 w-3" />
                     Bug
                 </button>
                 <button
                     type="button"
                     onClick={() => setTaskType("IMPROVEMENT")}
                     className={cn(
-                        "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                        "flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors",
                         taskType === "IMPROVEMENT"
                             ? "bg-primary/20 text-primary"
                             : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                     )}
                 >
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Sparkles className="h-3 w-3" />
                     Mejora
                 </button>
                 <button
                     type="button"
                     onClick={() => setPriority("HIGH")}
                     className={cn(
-                        "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                        "flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors",
                         priority === "HIGH"
                             ? "bg-warning/20 text-warning"
                             : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                     )}
                 >
-                    <AlertTriangle className="h-3.5 w-3.5" />
+                    <AlertTriangle className="h-3 w-3" />
                     Alta prioridad
-                </button>
-            </div>
-
-            <div className="mb-3 rounded-lg bg-secondary/50 px-3 py-2">
-                <div className="flex items-center justify-between gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setIsGeneralMode(!isGeneralMode)}
-                        className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                        {isGeneralMode ? (
-                            <ToggleRight className="h-5 w-5 text-primary" />
-                        ) : (
-                            <ToggleLeft className="h-5 w-5" />
-                        )}
-                        <span>Modo general (varias pantallas)</span>
-                    </button>
-                    <span className="text-xs text-muted-foreground">
-                        {isGeneralMode ? (
-                            <Select
-                                value={generalArea}
-                                onValueChange={(v) => setGeneralArea(v as GeneralArea)}
-                            >
-                                <SelectTrigger className="h-7 w-40 border-0 bg-transparent text-xs">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {generalAreas.map((area) => (
-                                        <SelectItem key={area} value={area} className="text-xs">
-                                            {generalAreaLabels[area]}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        ) : (
-                            currentSection
-                        )}
-                    </span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                    Activalo cuando el cambio aplica a mas de una seccion o ruta.
-                </p>
-            </div>
-
-            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary/40 p-2">
-                <div className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1 text-xs">
-                    <Cpu className="h-3.5 w-3.5" />
-                    <span>Modelo</span>
-                    <Select
-                        value={modelPreference}
-                        onValueChange={(value) => setModelPreference(value as "default" | "gpt-5-mini")}
-                    >
-                        <SelectTrigger className="h-7 w-36 border-0 bg-transparent text-xs">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="default" className="text-xs">
-                                Default
-                            </SelectItem>
-                            <SelectItem value="gpt-5-mini" className="text-xs">
-                                GPT-5 mini
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-
-                <button
-                    type="button"
-                    onClick={() => void handleImproveMessage()}
-                    disabled={!message.trim() || isSending || isImproving}
-                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    {isImproving ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                        <Wand2 className="h-3.5 w-3.5" />
-                    )}
-                    Mejorar mensaje
-                </button>
-
-                <button
-                    type="button"
-                    onClick={handleRevertImprove}
-                    disabled={originalMessageBeforeImprove === null || isSending || isImproving}
-                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    Revertir
                 </button>
             </div>
 
@@ -681,43 +685,183 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                 </div>
             )}
 
-            <div className="mb-3 rounded-lg border border-border bg-secondary/40 p-2">
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-                    <input
-                        type="checkbox"
-                        checked={attachmentsEnabled}
-                        onChange={(e) => setAttachmentsEnabled(e.target.checked)}
-                        className="h-4 w-4 rounded border-input bg-secondary accent-primary"
-                    />
-                    <Camera className="h-4 w-4" />
-                    <span>Habilitar subida de imagenes (Ctrl+V, drag/drop, seleccionar)</span>
-                </label>
-                {mediaChecking && (
-                    <p className="mt-1 text-xs text-muted-foreground">Validando capacidades de backend...</p>
-                )}
-                {mediaError && (
-                    <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
-                        <TriangleAlert className="h-3.5 w-3.5" />
-                        {mediaError}
-                    </p>
-                )}
-                <div className="mt-2 flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={handleFilePicker}
-                        disabled={!attachmentsEnabled || !mediaReady || attachments.length >= MAX_ATTACHMENTS}
-                        className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <ImagePlus className="h-3.5 w-3.5" />
-                        Seleccionar imagen
-                    </button>
-                    <span className="text-xs text-muted-foreground">
-                        {attachments.length}/{MAX_ATTACHMENTS}
-                    </span>
-                    {uploadingCount > 0 && (
-                        <span className="text-xs text-muted-foreground">Subiendo {uploadingCount}...</span>
-                    )}
+            {composerErrorMessage && (
+                <div className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {composerErrorMessage}
                 </div>
+            )}
+
+            <div className={cn(
+                "rounded-xl border border-border bg-secondary/35 p-3",
+                isDragging && "border-primary/70 ring-1 ring-primary/50"
+            )}>
+                {hasImageAttachments && (
+                    <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1">
+                        {attachments.map((attachment) => (
+                            <div
+                                key={attachment.id}
+                                className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border bg-background"
+                            >
+                                <img
+                                    src={attachment.previewUrl}
+                                    alt="Preview"
+                                    className="h-full w-full object-cover"
+                                />
+                                {attachment.status === "uploading" && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/45">
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                                    </div>
+                                )}
+                                {attachment.status === "error" && (
+                                    <button
+                                        type="button"
+                                        onClick={() => retryAttachment(attachment.id)}
+                                        className="absolute inset-0 flex items-center justify-center bg-black/60 text-white"
+                                        title={attachment.error ?? "No se pudo subir la imagen"}
+                                        aria-label="Reintentar subida"
+                                    >
+                                        <RefreshCw className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                                {attachment.status === "success" && (
+                                    <span className="absolute bottom-1 left-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => removeAttachment(attachment.id)}
+                                    className="absolute -right-1 -top-1 rounded-full bg-black/75 p-1 text-white"
+                                    aria-label="Quitar imagen"
+                                >
+                                    <X className="h-2.5 w-2.5" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <div className="flex">
+                    <textarea
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        onPaste={handlePaste}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        placeholder={`Describe el problema o sugerencia. Ejemplo: ${currentContextToken} boton no responde`}
+                        rows={3}
+                        className="feedback-textarea-scroll min-h-[96px] w-full flex-1 resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                    />
+                </div>
+
+                <div className="mt-3 space-y-2 border-t border-border/70 pt-3">
+                    <div className="flex items-center gap-2">
+                        <TooltipProvider delayDuration={120}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="inline-flex">
+                                        <button
+                                            type="button"
+                                            onClick={handleFilePicker}
+                                            disabled={!mediaReady || mediaChecking || attachments.length >= MAX_ATTACHMENTS}
+                                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                                            aria-label="Seleccionar imagen"
+                                        >
+                                            <ImagePlus className="h-3.5 w-3.5" />
+                                        </button>
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" align="center">Seleccionar imagen</TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="inline-flex">
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleImproveMessage()}
+                                            disabled={!message.trim() || isSending || isImproving}
+                                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                                            aria-label={isImproving ? "Mejorando mensaje" : "Mejorar mensaje"}
+                                        >
+                                            {isImproving ? (
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            ) : (
+                                                <Wand2 className="h-3.5 w-3.5" />
+                                            )}
+                                        </button>
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" align="center">Mejorar mensaje</TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="inline-flex">
+                                        <button
+                                            type="button"
+                                            onClick={handleRevertImprove}
+                                            disabled={originalMessageBeforeImprove === null || isSending || isImproving}
+                                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                                            aria-label="Revertir mejora"
+                                        >
+                                            <RotateCcw className="h-3.5 w-3.5" />
+                                        </button>
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" align="center">Revertir</TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+
+                        <div className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs">
+                            <Cpu className="h-3.5 w-3.5" />
+                            <Select
+                                value={modelPreference}
+                                onValueChange={(value) => setModelPreference(value as "default" | "gpt-5-mini")}
+                            >
+                                <SelectTrigger className="h-8 w-[136px] border-0 bg-transparent px-1 text-xs">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="default" className="text-xs">
+                                        Default
+                                    </SelectItem>
+                                    <SelectItem value="gpt-5-mini" className="text-xs">
+                                        GPT-5 mini
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="ml-auto flex items-center">
+                            <button
+                                type="button"
+                                onClick={() => void handleSubmit()}
+                                disabled={!message.trim() || isSending || isImproving || uploadingCount > 0}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-none border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                aria-label={isSending ? "Enviando" : "Enviar mensaje"}
+                            >
+                                {isSending ? (
+                                    <Loader2 className="h-5 w-5 animate-spin" />
+                                ) : (
+                                    <Send className="h-5 w-5" />
+                                )}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        {hasImageAttachments && (
+                            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                                Imagenes activas
+                            </span>
+                        )}
+                        {uploadingCount > 0 && (
+                            <span className="text-xs text-muted-foreground">Subiendo {uploadingCount}...</span>
+                        )}
+                    </div>
+                </div>
+
                 <input
                     ref={fileInputRef}
                     type="file"
@@ -726,91 +870,6 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                     className="hidden"
                     onChange={handlePickFiles}
                 />
-            </div>
-
-            {attachments.length > 0 && (
-                <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-                    {attachments.map((attachment) => (
-                        <div
-                            key={attachment.id}
-                            className="relative w-28 shrink-0 overflow-hidden rounded-md border border-border bg-secondary/50"
-                        >
-                            <img
-                                src={attachment.previewUrl}
-                                alt="Preview"
-                                className="h-20 w-full object-cover"
-                            />
-                            <div className="p-1">
-                                {attachment.status === "uploading" && (
-                                    <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        uploading
-                                    </p>
-                                )}
-                                {attachment.status === "success" && (
-                                    <p className="text-[10px] text-emerald-500">success</p>
-                                )}
-                                {attachment.status === "error" && (
-                                    <div className="space-y-1">
-                                        <p className="line-clamp-2 text-[10px] text-destructive">{attachment.error ?? "error"}</p>
-                                        <button
-                                            type="button"
-                                            onClick={() => retryAttachment(attachment.id)}
-                                            className="inline-flex items-center gap-1 text-[10px] text-foreground hover:text-primary"
-                                        >
-                                            <RefreshCw className="h-3 w-3" />
-                                            Reintentar
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => removeAttachment(attachment.id)}
-                                className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
-                                aria-label="Quitar imagen"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-                <input
-                    type="checkbox"
-                    checked={includeScreenshot}
-                    onChange={(e) => setIncludeScreenshot(e.target.checked)}
-                    className="h-4 w-4 rounded border-input bg-secondary accent-primary"
-                />
-                <Camera className="h-4 w-4" />
-                <span>Incluir captura de pantalla despues</span>
-            </label>
-
-            <div className="flex gap-2">
-                <textarea
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
-                    placeholder={`Describe el problema o sugerencia. Ejemplo: ${currentContextToken} boton no responde`}
-                    rows={2}
-                    className="flex-1 resize-none rounded-lg border border-input bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <button
-                    type="button"
-                    onClick={() => void handleSubmit()}
-                    disabled={!message.trim() || isSending || isImproving || uploadingCount > 0}
-                    className="flex h-auto min-w-12 items-center justify-center rounded-lg bg-primary px-4 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label={isSending ? "Enviando" : "Enviar mensaje"}
-                >
-                    {isSending ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                        <Send className="h-5 w-5" />
-                    )}
-                </button>
             </div>
         </div>
     )

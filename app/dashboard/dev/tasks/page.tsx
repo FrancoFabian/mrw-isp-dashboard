@@ -11,7 +11,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Search, ArrowUpDown } from "lucide-react"
+import { Search, ArrowUpDown, TriangleAlert } from "lucide-react"
 import Link from "next/link"
 import type { TaskStatus, TaskPriority, TaskType, RoleTag } from "@/types/task"
 import {
@@ -24,7 +24,7 @@ import {
 type FilterValue = "ALL" | TaskStatus | TaskPriority | TaskType | RoleTag
 
 export default function DevTasksInboxPage() {
-    const { tasks } = useTasks()
+    const { tasks, loading, errorMessage } = useTasks()
     const [searchQuery, setSearchQuery] = useState("")
     const [statusFilter, setStatusFilter] = useState<FilterValue>("ALL")
     const [priorityFilter, setPriorityFilter] = useState<FilterValue>("ALL")
@@ -35,10 +35,6 @@ export default function DevTasksInboxPage() {
     useEffect(() => {
         setIsClient(true)
     }, [])
-
-    if (!isClient) {
-        return null
-    }
 
     const filteredTasks = useMemo(() => {
         return tasks.filter((task) => {
@@ -78,6 +74,10 @@ export default function DevTasksInboxPage() {
         })
     }, [tasks, searchQuery, statusFilter, priorityFilter, typeFilter, roleFilter])
 
+    if (!isClient) {
+        return null
+    }
+
     const statusColors: Record<TaskStatus, string> = {
         OPEN: "bg-primary/20 text-primary border-primary/30",
         IN_REVIEW: "bg-warning/20 text-warning border-warning/30",
@@ -97,9 +97,16 @@ export default function DevTasksInboxPage() {
                     Inbox de Tareas
                 </h1>
                 <p className="mt-1 text-muted-foreground">
-                    {filteredTasks.length} tareas encontradas
+                    {loading ? "Cargando tareas..." : `${filteredTasks.length} tareas encontradas`}
                 </p>
             </div>
+
+            {errorMessage && (
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{errorMessage}</span>
+                </div>
+            )}
 
             {/* Filters */}
             <Card className="glass-card">

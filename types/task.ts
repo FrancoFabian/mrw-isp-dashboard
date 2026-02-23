@@ -35,6 +35,7 @@ export interface TaskAttachment {
 export interface TaskItem {
     id: string
     createdAt: string
+    updatedAt?: string
     title: string
     message: string
     roleTag: RoleTag

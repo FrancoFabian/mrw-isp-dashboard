@@ -5,14 +5,26 @@ import {
     useContext,
     useState,
     useCallback,
+    useEffect,
     type ReactNode,
 } from "react"
 import type { TaskItem, TaskDevNote, TaskStatus, TaskPriority, TaskType } from "@/types/task"
-import { mockTasks } from "@/mocks/tasks"
+import {
+    addTaskDevNote as requestAddTaskDevNote,
+    removeTaskAttachment as requestRemoveTaskAttachment,
+    requestTask,
+    requestTasks,
+    updateTask,
+} from "@/lib/chat/tasks-client"
+import { buildConnectionMessage } from "@/lib/chat/request-error"
 
 interface TasksContextValue {
     tasks: TaskItem[]
-    addTask: (task: TaskItem) => void
+    loading: boolean
+    syncing: boolean
+    errorMessage: string | null
+    refreshTasks: () => Promise<void>
+    addTask: (taskId: string) => Promise<TaskItem | null>
     updateTaskStatus: (taskId: string, status: TaskStatus) => void
     updateTaskPriority: (taskId: string, priority: TaskPriority) => void
     updateTaskType: (taskId: string, type: TaskType) => void
@@ -24,66 +36,160 @@ interface TasksContextValue {
 const TasksContext = createContext<TasksContextValue | null>(null)
 
 export function TasksProvider({ children }: { children: ReactNode }) {
-    const [tasks, setTasks] = useState<TaskItem[]>(mockTasks)
+    const [tasks, setTasks] = useState<TaskItem[]>([])
+    const [loading, setLoading] = useState(true)
+    const [syncing, setSyncing] = useState(false)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-    const addTask = useCallback((task: TaskItem) => {
-        setTasks((prev) => [task, ...prev])
+    const upsertTask = useCallback((task: TaskItem) => {
+        setTasks((prev) => {
+            const index = prev.findIndex((item) => item.id === task.id)
+            if (index < 0) {
+                return [task, ...prev]
+            }
+            const copy = [...prev]
+            copy[index] = task
+            return copy
+        })
     }, [])
+
+    const refreshTasks = useCallback(async () => {
+        setLoading(true)
+        try {
+            const remoteTasks = await requestTasks()
+            setTasks(remoteTasks)
+            setErrorMessage(null)
+        } catch (error) {
+            setErrorMessage(buildConnectionMessage(error))
+        } finally {
+            setLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        void refreshTasks()
+    }, [refreshTasks])
+
+    useEffect(() => {
+        const onOnline = () => void refreshTasks()
+        const onOffline = () => setErrorMessage("Sin conexion a internet. No se pudo conectar con el servidor.")
+        window.addEventListener("online", onOnline)
+        window.addEventListener("offline", onOffline)
+        return () => {
+            window.removeEventListener("online", onOnline)
+            window.removeEventListener("offline", onOffline)
+        }
+    }, [refreshTasks])
+
+    const addTask = useCallback(async (taskId: string): Promise<TaskItem | null> => {
+        setSyncing(true)
+        try {
+            const remoteTask = await requestTask(taskId)
+            upsertTask(remoteTask)
+            setErrorMessage(null)
+            return remoteTask
+        } catch (error) {
+            setErrorMessage(buildConnectionMessage(error))
+            return null
+        } finally {
+            setSyncing(false)
+        }
+    }, [upsertTask])
 
     const updateTaskStatus = useCallback((taskId: string, status: TaskStatus) => {
-        setTasks((prev) =>
-            prev.map((task) =>
-                task.id === taskId ? { ...task, status } : task
-            )
-        )
-    }, [])
+        setSyncing(true)
+        void updateTask(taskId, { status })
+            .then((remoteTask) => {
+                upsertTask(remoteTask)
+                setErrorMessage(null)
+            })
+            .catch((error) => {
+                setErrorMessage(buildConnectionMessage(error))
+            })
+            .finally(() => {
+                setSyncing(false)
+            })
+    }, [upsertTask])
 
     const updateTaskPriority = useCallback((taskId: string, priority: TaskPriority) => {
-        setTasks((prev) =>
-            prev.map((task) =>
-                task.id === taskId ? { ...task, priority } : task
-            )
-        )
-    }, [])
+        setSyncing(true)
+        void updateTask(taskId, { priority })
+            .then((remoteTask) => {
+                upsertTask(remoteTask)
+                setErrorMessage(null)
+            })
+            .catch((error) => {
+                setErrorMessage(buildConnectionMessage(error))
+            })
+            .finally(() => {
+                setSyncing(false)
+            })
+    }, [upsertTask])
 
     const updateTaskType = useCallback((taskId: string, type: TaskType) => {
-        setTasks((prev) =>
-            prev.map((task) =>
-                task.id === taskId ? { ...task, type } : task
-            )
-        )
-    }, [])
+        setSyncing(true)
+        void updateTask(taskId, { type })
+            .then((remoteTask) => {
+                upsertTask(remoteTask)
+                setErrorMessage(null)
+            })
+            .catch((error) => {
+                setErrorMessage(buildConnectionMessage(error))
+            })
+            .finally(() => {
+                setSyncing(false)
+            })
+    }, [upsertTask])
 
     const addDevNote = useCallback(
         (taskId: string, note: Omit<TaskDevNote, 'id' | 'createdAt'>) => {
-            const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase()
-            const newNote: TaskDevNote = {
-                ...note,
-                id: `NOTE-${Date.now().toString(36).toUpperCase()}-${randomSuffix}`,
-                createdAt: new Date().toISOString(),
-            }
-            setTasks((prev) =>
-                prev.map((task) =>
-                    task.id === taskId
-                        ? { ...task, devNotes: [...(task.devNotes ?? []), newNote] }
-                        : task
-                )
-            )
+            setSyncing(true)
+            void requestAddTaskDevNote(taskId, {
+                authorName: note.author.name,
+                text: note.text,
+            })
+                .then((savedNote) => {
+                    setTasks((prev) =>
+                        prev.map((task) =>
+                            task.id === taskId
+                                ? { ...task, devNotes: [...(task.devNotes ?? []), savedNote] }
+                                : task
+                        )
+                    )
+                    setErrorMessage(null)
+                })
+                .catch((error) => {
+                    setErrorMessage(buildConnectionMessage(error))
+                })
+                .finally(() => {
+                    setSyncing(false)
+                })
         },
         []
     )
 
     const removeTaskAttachment = useCallback((taskId: string, attachmentId: string) => {
-        setTasks((prev) =>
-            prev.map((task) =>
-                task.id === taskId
-                    ? {
-                        ...task,
-                        attachments: (task.attachments ?? []).filter((attachment) => attachment.id !== attachmentId),
-                    }
-                    : task
-            )
-        )
+        setSyncing(true)
+        void requestRemoveTaskAttachment(taskId, attachmentId)
+            .then(() => {
+                setTasks((prev) =>
+                    prev.map((task) =>
+                        task.id === taskId
+                            ? {
+                                ...task,
+                                attachments: (task.attachments ?? []).filter((attachment) => attachment.id !== attachmentId),
+                            }
+                            : task
+                    )
+                )
+                setErrorMessage(null)
+            })
+            .catch((error) => {
+                setErrorMessage(buildConnectionMessage(error))
+            })
+            .finally(() => {
+                setSyncing(false)
+            })
     }, [])
 
     const getTaskById = useCallback(
@@ -95,6 +201,10 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         <TasksContext.Provider
             value={{
                 tasks,
+                loading,
+                syncing,
+                errorMessage,
+                refreshTasks,
                 addTask,
                 updateTaskStatus,
                 updateTaskPriority,

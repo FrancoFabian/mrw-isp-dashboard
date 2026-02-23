@@ -9,6 +9,7 @@ interface SessionListProps {
     activeSessionId: string
     onSelectSession: (sessionId: string) => void
     onCreateSession: () => void
+    disableCreateSession?: boolean
 }
 
 type SessionGroup = {
@@ -78,6 +79,7 @@ export function SessionList({
     activeSessionId,
     onSelectSession,
     onCreateSession,
+    disableCreateSession = false,
 }: SessionListProps) {
     const groups = groupSessionsByDate(sessions)
 
@@ -87,14 +89,15 @@ export function SessionList({
                 <button
                     type="button"
                     onClick={onCreateSession}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80"
+                    disabled={disableCreateSession}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <Plus className="h-4 w-4" />
                     New Session
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="feedback-scroll flex-1 overflow-y-auto p-3">
                 {groups.map((group) => (
                     <div key={group.label} className="mb-6 last:mb-0">
                         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

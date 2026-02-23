@@ -43,6 +43,9 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
     const { id } = use(params)
     const router = useRouter()
     const {
+        loading,
+        syncing,
+        errorMessage,
         getTaskById,
         updateTaskStatus,
         updateTaskPriority,
@@ -56,6 +59,14 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
     const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null)
 
     const task = getTaskById(id)
+
+    if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20">
+                <h2 className="text-xl font-semibold text-foreground">Cargando tarea...</h2>
+            </div>
+        )
+    }
 
     if (!task) {
         return (
@@ -106,6 +117,12 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
     return (
         <>
             <div className="space-y-6">
+                {errorMessage && (
+                    <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                        {errorMessage}
+                    </div>
+                )}
+
                 <div className="flex items-start gap-4">
                     <button
                         onClick={() => router.back()}
@@ -317,6 +334,9 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                {syncing && (
+                                    <p className="text-xs text-muted-foreground">Sincronizando cambios con backend...</p>
+                                )}
                             </CardContent>
                         </Card>
 

@@ -3,11 +3,11 @@
 import { useTasks } from "@/stores/tasks-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ClipboardList, CheckCircle, AlertCircle, Clock } from "lucide-react"
+import { ClipboardList, CheckCircle, AlertCircle, Clock, TriangleAlert } from "lucide-react"
 import Link from "next/link"
 
 export default function DevDashboardPage() {
-    const { tasks } = useTasks()
+    const { tasks, loading, errorMessage } = useTasks()
 
     const openTasks = tasks.filter((t) => t.status === "OPEN")
     const inReviewTasks = tasks.filter((t) => t.status === "IN_REVIEW")
@@ -27,6 +27,13 @@ export default function DevDashboardPage() {
                 </p>
             </div>
 
+            {errorMessage && (
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{errorMessage}</span>
+                </div>
+            )}
+
             {/* Stats cards */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <Card className="glass-card">
@@ -38,7 +45,7 @@ export default function DevDashboardPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-bold text-foreground">
-                            {openTasks.length}
+                            {loading ? "-" : openTasks.length}
                         </div>
                     </CardContent>
                 </Card>
@@ -52,7 +59,7 @@ export default function DevDashboardPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-bold text-foreground">
-                            {inReviewTasks.length}
+                            {loading ? "-" : inReviewTasks.length}
                         </div>
                     </CardContent>
                 </Card>
@@ -66,7 +73,7 @@ export default function DevDashboardPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-bold text-foreground">
-                            {doneTasks.length}
+                            {loading ? "-" : doneTasks.length}
                         </div>
                     </CardContent>
                 </Card>
@@ -80,7 +87,7 @@ export default function DevDashboardPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-bold text-foreground">
-                            {highPriorityTasks.length}
+                            {loading ? "-" : highPriorityTasks.length}
                         </div>
                     </CardContent>
                 </Card>

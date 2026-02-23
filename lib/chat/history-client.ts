@@ -5,15 +5,16 @@ import type {
     ChatSessionsApiResponse,
     CreateChatSessionRequest,
 } from '@/types/chat'
+import { ApiRequestError } from '@/lib/chat/request-error'
 
 interface ApiErrorPayload {
     error?: string
     message?: string
 }
 
-function buildApiError(status: number, payload: ApiErrorPayload | null): Error {
+function buildApiError(status: number, payload: ApiErrorPayload | null): ApiRequestError {
     const detail = payload?.message ?? payload?.error ?? `status ${status}`
-    return new Error(`Feedback chat history API responded with ${detail}`)
+    return new ApiRequestError(`Feedback chat history API responded with ${detail}`, 'http', status)
 }
 
 async function parseErrorPayload(response: Response): Promise<ApiErrorPayload | null> {
@@ -25,12 +26,17 @@ async function parseErrorPayload(response: Response): Promise<ApiErrorPayload | 
 }
 
 export async function requestChatSessions(): Promise<ChatSession[]> {
-    const response = await fetch('/api/feedback-chat/sessions', {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    })
+    let response: Response
+    try {
+        response = await fetch('/api/feedback-chat/sessions', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+    } catch {
+        throw new ApiRequestError('Unable to reach chat sessions API', 'network')
+    }
 
     if (!response.ok) {
         throw buildApiError(response.status, await parseErrorPayload(response))
@@ -41,13 +47,18 @@ export async function requestChatSessions(): Promise<ChatSession[]> {
 }
 
 export async function createChatSession(payload: CreateChatSessionRequest): Promise<ChatSession> {
-    const response = await fetch('/api/feedback-chat/sessions', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-    })
+    let response: Response
+    try {
+        response = await fetch('/api/feedback-chat/sessions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        })
+    } catch {
+        throw new ApiRequestError('Unable to reach create-session API', 'network')
+    }
 
     if (!response.ok) {
         throw buildApiError(response.status, await parseErrorPayload(response))
@@ -60,13 +71,18 @@ export async function appendChatMessage(
     sessionId: string,
     payload: AppendChatMessageRequest
 ): Promise<ChatMessage> {
-    const response = await fetch(`/api/feedback-chat/sessions/${encodeURIComponent(sessionId)}/messages`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-    })
+    let response: Response
+    try {
+        response = await fetch(`/api/feedback-chat/sessions/${encodeURIComponent(sessionId)}/messages`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        })
+    } catch {
+        throw new ApiRequestError('Unable to reach append-message API', 'network')
+    }
 
     if (!response.ok) {
         throw buildApiError(response.status, await parseErrorPayload(response))
@@ -76,12 +92,17 @@ export async function appendChatMessage(
 }
 
 export async function clearChatSessionMessages(sessionId: string): Promise<ChatSession> {
-    const response = await fetch(`/api/feedback-chat/sessions/${encodeURIComponent(sessionId)}/messages`, {
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    })
+    let response: Response
+    try {
+        response = await fetch(`/api/feedback-chat/sessions/${encodeURIComponent(sessionId)}/messages`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+    } catch {
+        throw new ApiRequestError('Unable to reach clear-session API', 'network')
+    }
 
     if (!response.ok) {
         throw buildApiError(response.status, await parseErrorPayload(response))
