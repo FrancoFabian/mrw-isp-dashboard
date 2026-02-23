@@ -9,6 +9,32 @@ export class MediaUploadError extends Error {
     }
 }
 
+export class MediaTimeoutError extends Error {
+    constructor(message = 'Media request timeout') {
+        super(message)
+    }
+}
+
+async function fetchWithTimeout(
+    input: RequestInfo | URL,
+    init: RequestInit,
+    timeoutMs = 15000
+): Promise<Response> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+        return await fetch(input, { ...init, signal: controller.signal })
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new MediaTimeoutError()
+        }
+        throw error
+    } finally {
+        clearTimeout(timeoutId)
+    }
+}
+
 async function parseError(response: Response): Promise<string> {
     try {
         const payload = await response.json() as { error?: string; message?: string }
@@ -22,7 +48,7 @@ export async function uploadChatMedia(file: File): Promise<MediaUploadResponse> 
     const formData = new FormData()
     formData.append('file', file)
 
-    const response = await fetch('/api/chat/media/upload', {
+    const response = await fetchWithTimeout('/api/chat/media/upload', {
         method: 'POST',
         body: formData,
     })
@@ -35,7 +61,7 @@ export async function uploadChatMedia(file: File): Promise<MediaUploadResponse> 
 }
 
 export async function requestMediaCapabilities(): Promise<MediaCapabilitiesResponse> {
-    const response = await fetch('/api/chat/media/capabilities', {
+    const response = await fetchWithTimeout('/api/chat/media/capabilities', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
     })

@@ -43,13 +43,14 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { sileo } from "sileo"
 import { buildConnectionMessage, isBackendUnavailableMessage } from "@/lib/chat/request-error"
 import {
     requestAssistantReply,
     requestImprovedMessage,
     requestUsageSummary,
 } from "@/lib/chat/assistant-client"
-import { MediaUploadError, requestMediaCapabilities, uploadChatMedia } from "@/lib/chat/media-client"
+import { MediaTimeoutError, MediaUploadError, requestMediaCapabilities, uploadChatMedia } from "@/lib/chat/media-client"
 import type { UserRole } from "@/types/roles"
 import type { TaskType, TaskPriority } from "@/types/task"
 import type { GeneralArea } from "@/types/feedback"
@@ -100,6 +101,10 @@ function uploadErrorMessage(error: unknown): string {
         return error.message
     }
     return "No se pudo subir la imagen"
+}
+
+function isOfflineNow(): boolean {
+    return typeof navigator !== "undefined" && navigator.onLine === false
 }
 
 export function MessageComposer({ role, pathname, userName }: MessageComposerProps) {
@@ -201,6 +206,59 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
         setAttachments((prev) => prev.map((item) => (item.id === id ? updater(item) : item)))
     }, [])
 
+    const showSileoError = useCallback((title: string, description: string) => {
+        sileo.error({
+            title,
+            description,
+        })
+    }, [])
+
+    const showSileoInfo = useCallback((title: string, description: string) => {
+        sileo.info({
+            title,
+            description,
+        })
+    }, [])
+
+    const notifyUploadUnavailable = useCallback(() => {
+        if (isOfflineNow()) {
+            showSileoError("Sin conexion", "No se pudo adjuntar la imagen. Verifica tu internet.")
+            return
+        }
+        showSileoError("Servidor no disponible", "No se pudo adjuntar la imagen en este momento.")
+    }, [showSileoError])
+
+    const notifyUploadFailure = useCallback((error: unknown) => {
+        if (isOfflineNow()) {
+            showSileoError("Sin conexion", "No se pudo adjuntar la imagen. Verifica tu internet.")
+            return
+        }
+        if (error instanceof MediaTimeoutError) {
+            showSileoError("Servidor no responde", "Tiempo de espera agotado al subir la imagen.")
+            return
+        }
+        if (error instanceof MediaUploadError) {
+            if (error.status === 502 || error.status === 503 || error.status === 504) {
+                showSileoError("Servidor no disponible", "No se pudo adjuntar la imagen. Intenta de nuevo.")
+                return
+            }
+            showSileoError("Error al adjuntar imagen", `El servidor respondio con codigo ${error.status}.`)
+            return
+        }
+
+        const errorMessage = error instanceof Error ? error.message.toLowerCase() : ""
+        if (errorMessage.includes("timeout") || errorMessage.includes("abort")) {
+            showSileoError("Servidor no responde", "Tiempo de espera agotado al subir la imagen.")
+            return
+        }
+        if (errorMessage.includes("failed to fetch") || errorMessage.includes("network")) {
+            showSileoError("Servidor no disponible", "No se pudo adjuntar la imagen. Intenta de nuevo.")
+            return
+        }
+
+        showSileoError("No se pudo adjuntar imagen", "Intenta nuevamente en unos segundos.")
+    }, [showSileoError])
+
     const uploadAttachment = useCallback(async (item: ComposerAttachment) => {
         try {
             const upload = await uploadChatMedia(item.file)
@@ -216,16 +274,28 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                 status: "error",
                 error: uploadErrorMessage(error),
             }))
+            notifyUploadFailure(error)
         }
-    }, [updateAttachment])
+    }, [notifyUploadFailure, updateAttachment])
 
-    const queueFiles = useCallback((files: File[]) => {
-        if (!mediaReady || files.length === 0) {
+    const queueFiles = useCallback((files: File[], source: "picker" | "paste" | "drop" = "picker") => {
+        if (files.length === 0) {
+            return
+        }
+        if (uploadingCount > 0) {
+            showSileoInfo("Subida en progreso", "Espera a que termine la carga actual para adjuntar otra imagen.")
+            return
+        }
+        if (!mediaReady) {
+            if (source === "paste" || source === "drop") {
+                notifyUploadUnavailable()
+            }
             return
         }
 
         const room = Math.max(0, MAX_ATTACHMENTS - attachments.length)
         if (room === 0) {
+            showSileoInfo("Limite alcanzado", `Solo puedes adjuntar ${MAX_ATTACHMENTS} imagenes.`)
             return
         }
 
@@ -248,7 +318,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
         for (const item of toUpload) {
             void uploadAttachment(item)
         }
-    }, [attachments.length, mediaReady, uploadAttachment])
+    }, [attachments.length, mediaReady, notifyUploadUnavailable, showSileoInfo, uploadAttachment, uploadingCount])
 
     const handleFilePicker = () => {
         if (!mediaReady) {
@@ -259,7 +329,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
 
     const handlePickFiles = (event: ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files ? Array.from(event.target.files) : []
-        queueFiles(files)
+        queueFiles(files, "picker")
         event.target.value = ""
     }
 
@@ -283,33 +353,36 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     }
 
     const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-        if (!mediaReady) {
+        const imageItems = Array.from(event.clipboardData.items).filter(
+            (item) => item.kind === "file" && item.type.startsWith("image/")
+        )
+        if (imageItems.length === 0) {
+            // No image in clipboard: keep normal text paste behavior.
             return
         }
-        const files: File[] = []
-        for (const item of event.clipboardData.items) {
-            if (item.kind === "file" && item.type.startsWith("image/")) {
-                const file = item.getAsFile()
-                if (file) {
-                    files.push(file)
-                }
-            }
+
+        event.preventDefault()
+
+        // Clipboard image parsing can fail on some sources/apps even when kind=file.
+        const files = imageItems
+            .map((item) => item.getAsFile())
+            .filter((file): file is File => file !== null)
+
+        if (files.length === 0) {
+            showSileoError("No se pudo leer la imagen", "Intenta copiar la imagen nuevamente.")
+            return
         }
-        if (files.length > 0) {
-            event.preventDefault()
-            queueFiles(files)
-        }
+        queueFiles(files, "paste")
     }
 
     const handleDragOver = (event: DragEvent<HTMLElement>) => {
-        if (!mediaReady) {
-            return
-        }
         if (!Array.from(event.dataTransfer.types).includes("Files")) {
             return
         }
         event.preventDefault()
-        setIsDragging(true)
+        if (mediaReady) {
+            setIsDragging(true)
+        }
     }
 
     const handleDragLeave = () => {
@@ -317,12 +390,16 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     }
 
     const handleDrop = (event: DragEvent<HTMLElement>) => {
-        if (!mediaReady) {
+        if (!Array.from(event.dataTransfer.types).includes("Files")) {
             return
         }
         event.preventDefault()
         setIsDragging(false)
-        queueFiles(Array.from(event.dataTransfer.files))
+        const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"))
+        if (files.length === 0) {
+            return
+        }
+        queueFiles(files, "drop")
     }
 
     const handleSubmit = async () => {

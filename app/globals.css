@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../styles/tokens.css";
+@import "sileo/styles.css";
+
+
+[data-sileo-viewport] {
+  z-index: 90 !important;
+}
 
 /* ================================
    Tailwind v4 – dark mode por clase

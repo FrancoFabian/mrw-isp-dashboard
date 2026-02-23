@@ -12,7 +12,7 @@ import { NetworkProvider } from "@/stores/network-context"
 import { FeedbackChatWidget } from "@/components/feedback/FeedbackChatWidget"
 import { Bell, Menu, Search } from "lucide-react"
 import { useSearchParams } from "next/navigation"
-
+import "leaflet/dist/leaflet.css"
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const searchParams = useSearchParams()
