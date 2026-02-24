@@ -10,9 +10,10 @@ import { TasksProvider } from "@/stores/tasks-context"
 import { ChatProvider } from "@/stores/chat-context"
 import { NetworkProvider } from "@/stores/network-context"
 import { FeedbackChatWidget } from "@/components/feedback/FeedbackChatWidget"
+import { QueryProvider } from "@/components/providers/query-provider"
 import { Bell, Menu, Search } from "lucide-react"
 import { useSearchParams } from "next/navigation"
-import "leaflet/dist/leaflet.css"
+import "maplibre-gl/dist/maplibre-gl.css"
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const searchParams = useSearchParams()
@@ -73,17 +74,18 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <RoleProvider>
-      <TasksProvider>
-        <ChatProvider>
-          <NetworkProvider>
-            <Suspense fallback={<div>Loading...</div>}>
-              <DashboardLayoutInner>{children}</DashboardLayoutInner>
-            </Suspense>
-          </NetworkProvider>
-        </ChatProvider>
-      </TasksProvider>
-    </RoleProvider>
+    <QueryProvider>
+      <RoleProvider>
+        <TasksProvider>
+          <ChatProvider>
+            <NetworkProvider>
+              <Suspense fallback={<div>Loading...</div>}>
+                <DashboardLayoutInner>{children}</DashboardLayoutInner>
+              </Suspense>
+            </NetworkProvider>
+          </ChatProvider>
+        </TasksProvider>
+      </RoleProvider>
+    </QueryProvider>
   )
 }
-

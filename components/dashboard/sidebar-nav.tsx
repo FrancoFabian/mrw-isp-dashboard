@@ -31,6 +31,7 @@ import {
   Wrench as WrenchIcon,
   FileText,
   Globe, // Added import for Globe
+  Map as MapIcon,
 } from "lucide-react"
 import {
   Tooltip,
@@ -44,6 +45,7 @@ interface NavItem {
   href: string
   icon: React.ReactNode
   roles: UserRole[]
+  prefetch?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -71,6 +73,13 @@ const navItems: NavItem[] = [
     href: "/dashboard/network",
     icon: <GlobeIcon className="h-5 w-5" />,
     roles: ["admin"],
+  },
+  {
+    label: "Mapa NOC",
+    href: "/dashboard/network/map",
+    icon: <MapIcon className="h-5 w-5" />,
+    roles: ["admin"],
+    prefetch: false,
   },
   {
     label: "Soporte",
@@ -274,6 +283,7 @@ export function SidebarNav({ mobileOpen, onMobileClose }: SidebarNavProps) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={item.prefetch}
               onClick={onMobileClose}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
