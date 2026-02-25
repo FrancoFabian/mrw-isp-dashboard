@@ -242,32 +242,35 @@ const navItems: NavItem[] = [
 interface SidebarNavProps {
   mobileOpen?: boolean
   onMobileClose?: () => void
+  collapsed?: boolean
 }
 
-export function SidebarNav({ mobileOpen, onMobileClose }: SidebarNavProps) {
+export function SidebarNav({ mobileOpen, onMobileClose, collapsed = false }: SidebarNavProps) {
   const pathname = usePathname()
   const { role } = useRole()
 
   const filteredItems = navItems.filter((item) => item.roles.includes(role))
 
-  const sidebarContent = (
-    <>
-      {/* Logo */}
-      <div className="flex h-16 items-center justify-between gap-3 border-b border-sidebar-border px-4">
-        <div className="flex items-center gap-3">
-          <MrwOpticalLogo className="h-15 w-auto" />
-        </div>
-        <button
-          type="button"
-          onClick={onMobileClose}
-          className="rounded-lg p-1.5 text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground lg:hidden"
-        >
-          <X className="h-5 w-5" />
-        </button>
+  const renderSidebarContent = (isDesktopCollapsed: boolean, isMobile: boolean) => (
+    <div className="flex h-full flex-col">
+      {/* Header Area (Only visible on mobile for the close button) */}
+      <div className={cn(
+        "flex shrink-0 items-center justify-end px-4",
+        isDesktopCollapsed && !isMobile ? "hidden" : "h-14"
+      )}>
+        {isMobile && (
+          <button
+            type="button"
+            onClick={onMobileClose}
+            className="rounded-lg p-1.5 text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground lg:hidden"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-2 py-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-sidebar-border">
         {filteredItems.map((item) => {
           const isActive =
             item.href === "/dashboard" ||
@@ -279,26 +282,43 @@ export function SidebarNav({ mobileOpen, onMobileClose }: SidebarNavProps) {
               ? pathname === item.href
               : pathname.startsWith(item.href)
 
-          return (
+          const isItemCollapsed = isDesktopCollapsed && !isMobile;
+
+          const LinkComponent = (
             <Link
-              key={item.href}
               href={item.href}
               prefetch={item.prefetch}
               onClick={onMobileClose}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                "flex items-center rounded-lg py-2.5 text-sm font-medium transition-all duration-200",
+                isItemCollapsed ? "justify-center px-0" : "gap-3 px-3",
                 isActive
-                  ? "bg-primary/10 text-primary"
+                  ? "bg-primary/20 text-primary"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
               )}
             >
               <span className="shrink-0">{item.icon}</span>
-              <span>{item.label}</span>
+              {!isItemCollapsed && <span className="truncate">{item.label}</span>}
             </Link>
           )
+
+          if (isItemCollapsed) {
+            return (
+              <Tooltip key={item.href}>
+                <TooltipTrigger asChild>
+                  {LinkComponent}
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {item.label}
+                </TooltipContent>
+              </Tooltip>
+            )
+          }
+
+          return <React.Fragment key={item.href}>{LinkComponent}</React.Fragment>
         })}
       </nav>
-    </>
+    </div>
   )
 
   return (
@@ -312,18 +332,21 @@ export function SidebarNav({ mobileOpen, onMobileClose }: SidebarNavProps) {
       )}
 
       {/* Desktop sidebar */}
-      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-        {sidebarContent}
+      <aside className={cn(
+        "fixed left-4 top-24 bottom-4 z-30 hidden flex-col rounded-xl border border-sidebar-border bg-gradient-to-br from-zinc-900/95 via-[#0a0a0a]/98 to-black/95 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 lg:flex",
+        collapsed ? "w-16" : "w-60"
+      )}>
+        {renderSidebarContent(collapsed, false)}
       </aside>
 
       {/* Mobile drawer */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-300 lg:hidden",
+          "fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-sidebar-border bg-gradient-to-br from-zinc-900/95 via-[#0a0a0a]/98 to-black/95 transition-transform duration-300 lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {sidebarContent}
+        {renderSidebarContent(false, true)}
       </aside>
     </TooltipProvider>
   )

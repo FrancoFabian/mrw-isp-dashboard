@@ -9,11 +9,16 @@ export interface NetworkNodeDetails {
     status: MapNodeStatus
     lastSeenAt: string
     type?: MapNodeProjection["type"]
-    customer: {
+    customer?: {
         id?: string
         name: string
         username: string
         plan: string
+    }
+    infrastructure?: {
+        siteName: string
+        capacityLabel: string
+        uplink: string
     }
     device: {
         id?: string
@@ -35,6 +40,11 @@ interface ApiNodeDetailsDto {
         name?: string
         username?: string
         plan?: string
+    }
+    infrastructure?: {
+        siteName?: string
+        capacityLabel?: string
+        uplink?: string
     }
     device?: {
         id?: string
@@ -58,19 +68,35 @@ function normalizeStatus(status?: string): MapNodeStatus {
     }
 }
 
+function inferTypeFromId(nodeId: string): MapNodeProjection["type"] {
+    if (nodeId.startsWith("olt-")) return "olt"
+    if (nodeId.startsWith("nap-")) return "nap"
+    return "onu"
+}
+
 function toNodeDetails(dto: ApiNodeDetailsDto): NetworkNodeDetails {
+    const type = dto.type === "olt" || dto.type === "nap" || dto.type === "onu"
+        ? dto.type
+        : inferTypeFromId(dto.id)
+    const isClientEdge = type === "onu"
+
     return {
         id: dto.id,
         label: dto.label || dto.id,
         status: normalizeStatus(dto.status),
         lastSeenAt: dto.lastSeenAt || new Date().toISOString(),
-        type: dto.type === "olt" || dto.type === "nap" || dto.type === "onu" ? dto.type : undefined,
-        customer: {
+        type,
+        customer: isClientEdge ? {
             id: dto.customer?.id,
             name: dto.customer?.name || "Cliente no asignado",
             username: dto.customer?.username || "sin_usuario",
             plan: dto.customer?.plan || "Plan sin definir",
-        },
+        } : undefined,
+        infrastructure: !isClientEdge ? {
+            siteName: dto.infrastructure?.siteName || dto.label || `Sitio ${dto.id}`,
+            capacityLabel: dto.infrastructure?.capacityLabel || (type === "olt" ? "16 PON / 1024 ONUs" : "1:16 splitter"),
+            uplink: dto.infrastructure?.uplink || (type === "olt" ? "Core POP Oaxaca" : "OLT-Backbone-01"),
+        } : undefined,
         device: {
             id: dto.device?.id,
             model: dto.device?.model || "Modelo no disponible",
@@ -82,16 +108,25 @@ function toNodeDetails(dto: ApiNodeDetailsDto): NetworkNodeDetails {
 }
 
 function fallbackNodeDetails(nodeId: string): NetworkNodeDetails {
+    const type = inferTypeFromId(nodeId)
+    const isClientEdge = type === "onu"
+
     return {
         id: nodeId,
         label: `Nodo ${nodeId}`,
         status: "UNKNOWN",
         lastSeenAt: new Date().toISOString(),
-        customer: {
+        type,
+        customer: isClientEdge ? {
             name: "Cliente no encontrado",
             username: "sin_usuario",
             plan: "Sin plan",
-        },
+        } : undefined,
+        infrastructure: !isClientEdge ? {
+            siteName: `Sitio ${nodeId}`,
+            capacityLabel: "Sin capacidad",
+            uplink: "Sin uplink",
+        } : undefined,
         device: {
             model: "Sin datos",
             vendor: "Sin datos",

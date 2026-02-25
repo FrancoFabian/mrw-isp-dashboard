@@ -2,6 +2,7 @@ import { atom } from "jotai"
 import type { MapNodeStatus, MapNodeType, MapNodeProjection } from "@/types/network/mapProjection"
 import type { HeatmapMode } from "@/lib/territory/types"
 import type { ExpansionCell } from "@/lib/expansion/types"
+import type { NocScope } from "@/lib/impact/types"
 
 /* ── Viewport ── */
 export interface MapViewport {
@@ -28,6 +29,12 @@ export const selectedNodeAtom = atom((get) => {
     const id = get(selectedNodeIdAtom)
     if (!id) return null
     return get(mapNodesAtom).find((node) => node.id === id) ?? null
+})
+
+/* NOC scope (tenant + optional node ownership) */
+export const nocScopeAtom = atom<NocScope>({
+    tenantId: "default",
+    nodeIds: undefined,
 })
 
 /* ── Filters ── */

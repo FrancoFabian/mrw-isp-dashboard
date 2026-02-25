@@ -1,20 +1,26 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAtomValue, useSetAtom } from "jotai"
 import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl"
-import MapView, { Layer, Source, type LayerProps, type MapRef } from "react-map-gl/maplibre"
+import MapView, { Layer, Marker, Source, type LayerProps, type MapRef } from "react-map-gl/maplibre"
 import { mapFocusRequestAtom, viewportAtom } from "@/components/network/map/state/mapAtoms"
 import type { MapNodeProjection } from "@/types/network/mapProjection"
 import type { FeatureCollection, Polygon } from "geojson"
 import { buildNocGeoJson } from "./buildNocGeoJson"
 import { cn } from "@/lib/utils"
 import type { MapOverlay } from "./state/mapAtoms"
+import type { NodeClientImpact, NodeImpact } from "@/lib/impact/types"
+import { OltIcon, type OltState } from "@/components/network/icons/OltIcon"
+import { NapIcon, type NapState } from "@/components/network/icons/NpaIcon"
+import { OnuIcon, type OnuState } from "@/components/network/icons/OnuIcon"
 
 const styleUrl = `https://api.maptiler.com/maps/${process.env.NEXT_PUBLIC_MAPTILER_STYLE}/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`
 
 const INTERACTIVE_LAYER_IDS = ["noc-clusters", "noc-unclustered-points"]
 const NOC_ROAD_CASING_LAYER_ID = "noc-road-casing"
+const NODE_CLUSTER_MAX_ZOOM = 15
+const NODE_ICON_FALLBACK_ZOOM = 15.25
 
 /* ── Fintech dark palette (Tailwind Slate scale) ───────────────────── */
 const P = {
@@ -165,7 +171,7 @@ const CLUSTER_COUNT_LAYER: LayerProps = {
 const UNCLUSTERED_ALERT_LAYER: LayerProps = {
     id: "noc-unclustered-alert",
     type: "circle",
-    filter: ["!", ["has", "point_count"]],
+    filter: ["all", ["!", ["has", "point_count"]], ["!=", ["coalesce", ["get", "type"], ""], "olt"], ["!=", ["coalesce", ["get", "type"], ""], "nap"], ["!=", ["coalesce", ["get", "type"], ""], "onu"]],
     paint: {
         "circle-color": [
             "match",
@@ -190,10 +196,34 @@ const UNCLUSTERED_ALERT_LAYER: LayerProps = {
     },
 }
 
+const UNCLUSTERED_AFFECTED_SEVERITY_LAYER: LayerProps = {
+    id: "noc-unclustered-affected-severity",
+    type: "circle",
+    filter: ["all", ["!", ["has", "point_count"]], ["!=", ["coalesce", ["get", "type"], ""], "olt"], ["!=", ["coalesce", ["get", "type"], ""], "nap"], ["!=", ["coalesce", ["get", "type"], ""], "onu"], [">", ["coalesce", ["get", "affectedClients"], 0], 0]],
+    paint: {
+        "circle-color": [
+            "match",
+            ["coalesce", ["get", "affectedSeverity"], "NONE"],
+            "HIGH", "rgba(248,113,113,0.24)",
+            "LOW", "rgba(251,191,36,0.18)",
+            "rgba(0,0,0,0)",
+        ],
+        "circle-radius": [
+            "match",
+            ["coalesce", ["get", "affectedSeverity"], "NONE"],
+            "HIGH", 16,
+            "LOW", 13,
+            0,
+        ],
+        "circle-blur": 0.4,
+        "circle-opacity": 0.9,
+    },
+}
+
 const UNCLUSTERED_LAYER: LayerProps = {
     id: "noc-unclustered-points",
     type: "circle",
-    filter: ["!", ["has", "point_count"]],
+    filter: ["all", ["!", ["has", "point_count"]], ["!=", ["coalesce", ["get", "type"], ""], "olt"], ["!=", ["coalesce", ["get", "type"], ""], "nap"], ["!=", ["coalesce", ["get", "type"], ""], "onu"]],
     paint: {
         "circle-color": [
             "match",
@@ -227,6 +257,65 @@ const UNCLUSTERED_LAYER: LayerProps = {
             1.5,
         ],
         "circle-opacity": 0.97,
+    },
+}
+
+const UNCLUSTERED_AFFECTED_BADGE_LAYER: LayerProps = {
+    id: "noc-unclustered-affected-badge",
+    type: "symbol",
+    filter: ["all", ["!", ["has", "point_count"]], ["!=", ["coalesce", ["get", "type"], ""], "olt"], ["!=", ["coalesce", ["get", "type"], ""], "nap"], ["!=", ["coalesce", ["get", "type"], ""], "onu"], [">", ["coalesce", ["get", "affectedClients"], 0], 0]],
+    minzoom: 9,
+    layout: {
+        "text-field": ["to-string", ["coalesce", ["get", "affectedClients"], 0]],
+        "text-font": ["Open Sans Bold"],
+        "text-size": 10,
+        "text-offset": [0, -1.3],
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+    },
+    paint: {
+        "text-color": [
+            "match",
+            ["coalesce", ["get", "affectedSeverity"], "NONE"],
+            "HIGH", "#fecaca",
+            "LOW", "#fde68a",
+            "#f8fafc",
+        ],
+        "text-halo-color": "rgba(2,6,23,0.95)",
+        "text-halo-width": 1.4,
+    },
+}
+
+const UNCLUSTERED_OLT_HIT_LAYER: LayerProps = {
+    id: "noc-unclustered-olt-hit",
+    type: "circle",
+    filter: ["all", ["!", ["has", "point_count"]], ["==", ["coalesce", ["get", "type"], ""], "olt"]],
+    paint: {
+        "circle-color": "rgba(0,0,0,0)",
+        "circle-radius": 20,
+        "circle-opacity": 0,
+    },
+}
+
+const UNCLUSTERED_NAP_HIT_LAYER: LayerProps = {
+    id: "noc-unclustered-nap-hit",
+    type: "circle",
+    filter: ["all", ["!", ["has", "point_count"]], ["==", ["coalesce", ["get", "type"], ""], "nap"]],
+    paint: {
+        "circle-color": "rgba(0,0,0,0)",
+        "circle-radius": 20,
+        "circle-opacity": 0,
+    },
+}
+
+const UNCLUSTERED_ONU_HIT_LAYER: LayerProps = {
+    id: "noc-unclustered-onu-hit",
+    type: "circle",
+    filter: ["all", ["!", ["has", "point_count"]], ["==", ["coalesce", ["get", "type"], ""], "onu"]],
+    paint: {
+        "circle-color": "rgba(0,0,0,0)",
+        "circle-radius": 16,
+        "circle-opacity": 0,
     },
 }
 
@@ -303,6 +392,27 @@ function isRoadOutlineLayer(layer: { id?: string;[key: string]: unknown }): bool
     return lid.includes("road") && lid.includes("outline")
 }
 
+function toOltState(status: MapNodeProjection["status"]): OltState {
+    if (status === "ONLINE") return "online"
+    if (status === "OFFLINE") return "offline"
+    if (status === "DEGRADED") return "degraded"
+    return "unknown"
+}
+
+function toNapState(status: MapNodeProjection["status"]): NapState {
+    if (status === "ONLINE") return "online"
+    if (status === "OFFLINE") return "offline"
+    if (status === "DEGRADED") return "degraded"
+    return "unknown"
+}
+
+function toOnuState(status: MapNodeProjection["status"]): OnuState {
+    if (status === "ONLINE") return "online"
+    if (status === "OFFLINE") return "offline"
+    if (status === "DEGRADED") return "degraded"
+    return "unknown"
+}
+
 /* ── Label tuning map (layer id substring → [text-color, halo-width]) */
 const LABEL_TUNING: Record<string, [string, number]> = {
     "city": [P.labelCity, 1.4],
@@ -321,14 +431,15 @@ function applyNocBasemapTuning(map: MapLibreMap) {
     // Fallback casing: only if the base style lacks a Road network outline
     const hasBaseOutline = layers.some((l) => isRoadOutlineLayer(l))
     if (!hasBaseOutline) {
-        const anchor = roadLayers[0]
+        const anchor = roadLayers[0] as Record<string, unknown> | undefined
         const src = anchor?.source
         const srcL = anchor?.["source-layer"]
+        const anchorId = typeof anchor?.id === "string" ? anchor.id : undefined
         if (
             src && typeof src === "string"
             && srcL && typeof srcL === "string"
             && !map.getLayer(NOC_ROAD_CASING_LAYER_ID)
-            && anchor?.id
+            && anchorId
         ) {
             map.addLayer(
                 {
@@ -340,11 +451,11 @@ function applyNocBasemapTuning(map: MapLibreMap) {
                     layout: { "line-cap": "round", "line-join": "round" },
                     paint: {
                         "line-color": P.roadCasing,
-                        "line-width": ROAD_CASING_WIDTH_EXPR,
+                        "line-width": ROAD_CASING_WIDTH_EXPR as unknown as any,
                         "line-opacity": 0.72,
                     },
                 },
-                anchor.id,
+                anchorId,
             )
         }
     }
@@ -452,23 +563,108 @@ const EMPTY_HEX_FC: AnyGeoJson = { type: "FeatureCollection", features: [] }
 
 interface NocMapCanvasProps {
     nodes: MapNodeProjection[]
-    impactMap?: Map<string, import("@/lib/impact/types").NodeImpact>
+    impactMap?: Map<string, NodeImpact>
+    clientImpactMap?: Map<string, NodeClientImpact>
+    selectedNodeId?: string | null
     hexGeoJson?: AnyGeoJson | null
     hexLayerMode?: MapOverlay
     onNodeClick?: (id: string) => void
+    onNodeHover?: (id: string, point: { x: number; y: number }) => void
+    onNodeLeave?: () => void
     onHexHover?: (cellId: string, point: { x: number; y: number }) => void
     onHexLeave?: () => void
     className?: string
 }
 
-export function NocMapCanvas({ nodes, impactMap, hexGeoJson, hexLayerMode = "impact", onNodeClick, onHexHover, onHexLeave, className }: NocMapCanvasProps) {
+export function NocMapCanvas({
+    nodes,
+    impactMap,
+    clientImpactMap,
+    selectedNodeId,
+    hexGeoJson,
+    hexLayerMode = "impact",
+    onNodeClick,
+    onNodeHover,
+    onNodeLeave,
+    onHexHover,
+    onHexLeave,
+    className,
+}: NocMapCanvasProps) {
     const setViewport = useSetAtom(viewportAtom)
     const setMapFocusRequest = useSetAtom(mapFocusRequestAtom)
     const focusRequest = useAtomValue(mapFocusRequestAtom)
     const mapRef = useRef<MapRef | null>(null)
     const didLogStyleRef = useRef(false)
     const tunedStyleRef = useRef<string | null>(null)
-    const geoJson = useMemo(() => buildNocGeoJson(nodes, impactMap), [nodes, impactMap])
+    const refreshVisibleOltRafRef = useRef<number | null>(null)
+    const [mapZoom, setMapZoom] = useState(10)
+    const [hoveredOltId, setHoveredOltId] = useState<string | null>(null)
+    const [hoveredNapId, setHoveredNapId] = useState<string | null>(null)
+    const [hoveredOnuId, setHoveredOnuId] = useState<string | null>(null)
+    const [visibleOltIds, setVisibleOltIds] = useState<Set<string>>(new Set())
+    const [visibleNapIds, setVisibleNapIds] = useState<Set<string>>(new Set())
+    const [visibleOnuIds, setVisibleOnuIds] = useState<Set<string>>(new Set())
+    const [hasVisibleClusters, setHasVisibleClusters] = useState(false)
+    const geoJson = useMemo(
+        () => buildNocGeoJson(nodes, impactMap, clientImpactMap),
+        [nodes, impactMap, clientImpactMap],
+    )
+    const oltNodes = useMemo(
+        () => nodes.filter((node) => node.type === "olt"),
+        [nodes],
+    )
+    const napNodes = useMemo(
+        () => nodes.filter((node) => node.type === "nap"),
+        [nodes],
+    )
+    const onuNodes = useMemo(
+        () => nodes.filter((node) => node.type === "onu"),
+        [nodes],
+    )
+    const visibleOltNodes = useMemo(
+        () => oltNodes.filter((node) => visibleOltIds.has(node.id)),
+        [oltNodes, visibleOltIds],
+    )
+    const visibleNapNodes = useMemo(
+        () => napNodes.filter((node) => visibleNapIds.has(node.id)),
+        [napNodes, visibleNapIds],
+    )
+    const visibleOnuNodes = useMemo(
+        () => onuNodes.filter((node) => visibleOnuIds.has(node.id)),
+        [onuNodes, visibleOnuIds],
+    )
+    const effectiveVisibleOltNodes = useMemo(() => {
+        if (visibleOltNodes.length > 0) return visibleOltNodes
+        if (mapZoom >= NODE_ICON_FALLBACK_ZOOM && !hasVisibleClusters) return oltNodes
+        return []
+    }, [visibleOltNodes, oltNodes, mapZoom, hasVisibleClusters])
+    const effectiveVisibleNapNodes = useMemo(() => {
+        if (visibleNapNodes.length > 0) return visibleNapNodes
+        if (mapZoom >= NODE_ICON_FALLBACK_ZOOM && !hasVisibleClusters) return napNodes
+        return []
+    }, [visibleNapNodes, napNodes, mapZoom, hasVisibleClusters])
+    const effectiveVisibleOnuNodes = useMemo(() => {
+        if (visibleOnuNodes.length > 0) return visibleOnuNodes
+        if (mapZoom >= NODE_ICON_FALLBACK_ZOOM && !hasVisibleClusters) return onuNodes
+        return []
+    }, [visibleOnuNodes, onuNodes, mapZoom, hasVisibleClusters])
+    const shouldRenderOltMarkers = effectiveVisibleOltNodes.length > 0
+    const shouldRenderNapMarkers = effectiveVisibleNapNodes.length > 0
+    const shouldRenderOnuMarkers = effectiveVisibleOnuNodes.length > 0
+    const oltIconSize = useMemo(() => {
+        // Base size doubled (+100%): 81 -> 162
+        // Then grow slightly with zoom, capped to avoid excessive scaling.
+        const growthFactor = Math.min(1.2, 1 + Math.max(0, mapZoom - 16) * 0.1)
+        return Math.round(162 * growthFactor)
+    }, [mapZoom])
+    const napIconSize = useMemo(() => {
+        const growthFactor = Math.min(1.15, 1 + Math.max(0, mapZoom - 16) * 0.08)
+        return Math.round(110 * growthFactor)
+    }, [mapZoom])
+    const onuIconSize = useMemo(() => {
+        const growthFactor = Math.min(1.12, 1 + Math.max(0, mapZoom - 16) * 0.07)
+        return Math.round(88 * growthFactor)
+    }, [mapZoom])
     const nodeById = useMemo(
         () => new Map(nodes.map((node) => [node.id, node])),
         [nodes],
@@ -480,11 +676,129 @@ export function NocMapCanvas({ nodes, impactMap, hexGeoJson, hexLayerMode = "imp
         if (!map) return
 
         const style = map.getStyle()
-        const styleToken = style?.sprite || style?.name || "noc-style"
+        const styleToken = style?.name ?? (typeof style?.sprite === "string" ? style.sprite : "noc-style")
         if (!styleToken || tunedStyleRef.current === styleToken) return
 
         applyNocBasemapTuning(map)
         tunedStyleRef.current = styleToken
+    }, [])
+
+    const refreshVisibleOltNodes = useCallback(() => {
+        const map = mapRef.current?.getMap()
+        if (!map) return
+
+        const oltHitLayerId = "noc-unclustered-olt-hit"
+        const napHitLayerId = "noc-unclustered-nap-hit"
+        const onuHitLayerId = "noc-unclustered-onu-hit"
+        const hasOltHitLayer = Boolean(map.getLayer(oltHitLayerId))
+        const hasNapHitLayer = Boolean(map.getLayer(napHitLayerId))
+        const hasOnuHitLayer = Boolean(map.getLayer(onuHitLayerId))
+        const clusterLayerId = "noc-clusters"
+        const hasClusterLayer = Boolean(map.getLayer(clusterLayerId))
+
+        if (!hasOltHitLayer && !hasNapHitLayer && !hasOnuHitLayer) {
+            setVisibleOltIds((prev) => (prev.size === 0 ? prev : new Set()))
+            setVisibleNapIds((prev) => (prev.size === 0 ? prev : new Set()))
+            setVisibleOnuIds((prev) => (prev.size === 0 ? prev : new Set()))
+            setHasVisibleClusters(false)
+            return
+        }
+
+        if (hasClusterLayer) {
+            const clusterFeatures = map.queryRenderedFeatures(undefined, { layers: [clusterLayerId] })
+            setHasVisibleClusters(clusterFeatures.length > 0)
+        } else {
+            setHasVisibleClusters(false)
+        }
+
+        const nextOlt = new Set<string>()
+        if (hasOltHitLayer) {
+            const oltFeatures = map.queryRenderedFeatures(undefined, { layers: [oltHitLayerId] })
+            for (const feature of oltFeatures) {
+                const id = feature.properties?.id
+                if (id) nextOlt.add(String(id))
+            }
+        }
+
+        setVisibleOltIds((prev) => {
+            if (prev.size === nextOlt.size) {
+                let same = true
+                for (const id of prev) {
+                    if (!nextOlt.has(id)) {
+                        same = false
+                        break
+                    }
+                }
+                if (same) return prev
+            }
+            return nextOlt
+        })
+
+        const nextNap = new Set<string>()
+        if (hasNapHitLayer) {
+            const napFeatures = map.queryRenderedFeatures(undefined, { layers: [napHitLayerId] })
+            for (const feature of napFeatures) {
+                const id = feature.properties?.id
+                if (id) nextNap.add(String(id))
+            }
+        }
+
+        setVisibleNapIds((prev) => {
+            if (prev.size === nextNap.size) {
+                let same = true
+                for (const id of prev) {
+                    if (!nextNap.has(id)) {
+                        same = false
+                        break
+                    }
+                }
+                if (same) return prev
+            }
+            return nextNap
+        })
+
+        const nextOnu = new Set<string>()
+        if (hasOnuHitLayer) {
+            const onuFeatures = map.queryRenderedFeatures(undefined, { layers: [onuHitLayerId] })
+            for (const feature of onuFeatures) {
+                const id = feature.properties?.id
+                if (id) nextOnu.add(String(id))
+            }
+        }
+
+        setVisibleOnuIds((prev) => {
+            if (prev.size === nextOnu.size) {
+                let same = true
+                for (const id of prev) {
+                    if (!nextOnu.has(id)) {
+                        same = false
+                        break
+                    }
+                }
+                if (same) return prev
+            }
+            return nextOnu
+        })
+    }, [])
+
+    const scheduleRefreshVisibleOltNodes = useCallback(() => {
+        if (refreshVisibleOltRafRef.current !== null) return
+        refreshVisibleOltRafRef.current = window.requestAnimationFrame(() => {
+            refreshVisibleOltRafRef.current = null
+            refreshVisibleOltNodes()
+        })
+    }, [refreshVisibleOltNodes])
+
+    useEffect(() => {
+        scheduleRefreshVisibleOltNodes()
+    }, [geoJson, scheduleRefreshVisibleOltNodes])
+
+    useEffect(() => {
+        return () => {
+            if (refreshVisibleOltRafRef.current !== null) {
+                window.cancelAnimationFrame(refreshVisibleOltRafRef.current)
+            }
+        }
     }, [])
 
     useEffect(() => {
@@ -509,10 +823,12 @@ export function NocMapCanvas({ nodes, impactMap, hexGeoJson, hexLayerMode = "imp
 
         const bounds = map.getBounds()
         const center = map.getCenter()
+        const zoom = map.getZoom()
+        setMapZoom(zoom)
 
         setViewport({
             center: [center.lat, center.lng],
-            zoom: map.getZoom(),
+            zoom,
             bounds: {
                 north: bounds.getNorth(),
                 south: bounds.getSouth(),
@@ -538,9 +854,11 @@ export function NocMapCanvas({ nodes, impactMap, hexGeoJson, hexLayerMode = "imp
                 void source
                     .getClusterExpansionZoom(clusterId)
                     .then((zoom) => {
+                        const expansionZoom = Math.min(zoom + 0.75, 18)
+                        const point = feature.geometry as unknown as { coordinates: [number, number] }
                         map.easeTo({
-                            center: [feature.geometry.coordinates[0], feature.geometry.coordinates[1]],
-                            zoom: Math.min(zoom, 18),
+                            center: [point.coordinates[0], point.coordinates[1]],
+                            zoom: expansionZoom,
                             duration: 350,
                         })
                     })
@@ -621,26 +939,67 @@ export function NocMapCanvas({ nodes, impactMap, hexGeoJson, hexLayerMode = "imp
                     onLoad={() => {
                         syncViewport()
                         ensureTunedStyle()
+                        scheduleRefreshVisibleOltNodes()
                     }}
-                    onStyleData={ensureTunedStyle}
-                    onMoveEnd={syncViewport}
+                    onMove={(event) => {
+                        setMapZoom(event.viewState.zoom)
+                        scheduleRefreshVisibleOltNodes()
+                    }}
+                    onStyleData={() => {
+                        ensureTunedStyle()
+                        scheduleRefreshVisibleOltNodes()
+                    }}
+                    onMoveEnd={() => {
+                        syncViewport()
+                        scheduleRefreshVisibleOltNodes()
+                    }}
                     onClick={handleMapClick}
                     onMouseMove={(e) => {
-                        if (!onHexHover) return
                         const map = mapRef.current?.getMap()
                         if (!map) return
-                        const queryLayers = hexLayerMode === "expansion" ? ["expansion-hex-fill"] : ["territory-hex-fill"]
-                        const features = map.queryRenderedFeatures(e.point, { layers: queryLayers })
-                        if (features.length > 0 && features[0].properties?.cellId) {
-                            map.getCanvas().style.cursor = "pointer"
-                            onHexHover(String(features[0].properties.cellId), { x: e.point.x, y: e.point.y })
-                        } else {
-                            map.getCanvas().style.cursor = ""
-                            onHexLeave?.()
+
+                        let hasPointerTarget = false
+
+                        if (onNodeHover) {
+                            const nodeLayerId = "noc-unclustered-points"
+                            if (map.getLayer(nodeLayerId)) {
+                                const nodeFeatures = map.queryRenderedFeatures(e.point, { layers: [nodeLayerId] })
+                                const nodeFeature = nodeFeatures[0]
+                                const nodeId = nodeFeature?.properties?.id
+                                if (nodeId) {
+                                    hasPointerTarget = true
+                                    onNodeHover(String(nodeId), { x: e.point.x, y: e.point.y })
+                                } else {
+                                    onNodeLeave?.()
+                                }
+                            } else {
+                                onNodeLeave?.()
+                            }
                         }
+
+                        if (onHexHover) {
+                            const hexLayerId = hexLayerMode === "expansion" ? "expansion-hex-fill" : "territory-hex-fill"
+                            if (map.getLayer(hexLayerId)) {
+                                const features = map.queryRenderedFeatures(e.point, { layers: [hexLayerId] })
+                                if (features.length > 0 && features[0].properties?.cellId) {
+                                    hasPointerTarget = true
+                                    onHexHover(String(features[0].properties.cellId), { x: e.point.x, y: e.point.y })
+                                } else {
+                                    onHexLeave?.()
+                                }
+                            } else {
+                                onHexLeave?.()
+                            }
+                        }
+
+                        map.getCanvas().style.cursor = hasPointerTarget ? "pointer" : ""
                     }}
                     onMouseLeave={() => {
                         onHexLeave?.()
+                        onNodeLeave?.()
+                        setHoveredOltId(null)
+                        setHoveredNapId(null)
+                        setHoveredOnuId(null)
                     }}
                     reuseMaps
                 >
@@ -662,14 +1021,158 @@ export function NocMapCanvas({ nodes, impactMap, hexGeoJson, hexLayerMode = "imp
                         data={geoJson}
                         cluster
                         clusterRadius={50}
-                        clusterMaxZoom={16}
+                        clusterMaxZoom={NODE_CLUSTER_MAX_ZOOM}
                     >
                         <Layer {...CLUSTER_HALO_LAYER} />
                         <Layer {...CLUSTER_LAYER} />
                         <Layer {...CLUSTER_COUNT_LAYER} />
+                        <Layer {...UNCLUSTERED_OLT_HIT_LAYER} />
+                        <Layer {...UNCLUSTERED_NAP_HIT_LAYER} />
+                        <Layer {...UNCLUSTERED_ONU_HIT_LAYER} />
+                        <Layer {...UNCLUSTERED_AFFECTED_SEVERITY_LAYER} />
                         <Layer {...UNCLUSTERED_ALERT_LAYER} />
                         <Layer {...UNCLUSTERED_LAYER} />
+                        <Layer {...UNCLUSTERED_AFFECTED_BADGE_LAYER} />
                     </Source>
+
+                    {shouldRenderOltMarkers && effectiveVisibleOltNodes.map((node) => {
+                        const isSelected = selectedNodeId === node.id
+                        const hasAlarm = Boolean(node.badge)
+                        const isHovered = hoveredOltId === node.id
+                        return (
+                            <Marker
+                                key={node.id}
+                                latitude={node.lat}
+                                longitude={node.lng}
+                                anchor="center"
+                                style={{ zIndex: isSelected ? 2 : 1 }}
+                            >
+                                <button
+                                    type="button"
+                                    aria-label={`Abrir nodo ${node.label || node.id}`}
+                                    className="cursor-pointer border-0 bg-transparent p-0"
+                                    onClick={(event) => {
+                                        event.stopPropagation()
+                                        onNodeClick?.(node.id)
+                                    }}
+                                    onMouseEnter={() => {
+                                        setHoveredOltId(node.id)
+                                        if (!onNodeHover) return
+                                        const map = mapRef.current?.getMap()
+                                        if (!map) return
+                                        const point = map.project([node.lng, node.lat])
+                                        onNodeHover(node.id, { x: point.x, y: point.y })
+                                    }}
+                                    onMouseLeave={() => {
+                                        setHoveredOltId((prev) => (prev === node.id ? null : prev))
+                                        onNodeLeave?.()
+                                    }}
+                                >
+                                    <OltIcon
+                                        size={oltIconSize}
+                                        state={toOltState(node.status)}
+                                        selected={isSelected}
+                                        alarm={hasAlarm}
+                                        animate={hasAlarm || isHovered ? "always" : "never"}
+                                        label={`${node.label || node.id} OLT ${node.status.toLowerCase()}`}
+                                    />
+                                </button>
+                            </Marker>
+                        )
+                    })}
+
+                    {shouldRenderNapMarkers && effectiveVisibleNapNodes.map((node) => {
+                        const isSelected = selectedNodeId === node.id
+                        const hasAlarm = Boolean(node.badge)
+                        const isHovered = hoveredNapId === node.id
+                        return (
+                            <Marker
+                                key={node.id}
+                                latitude={node.lat}
+                                longitude={node.lng}
+                                anchor="center"
+                                style={{ zIndex: isSelected ? 2 : 1 }}
+                            >
+                                <button
+                                    type="button"
+                                    aria-label={`Abrir nodo ${node.label || node.id}`}
+                                    className="cursor-pointer border-0 bg-transparent p-0"
+                                    onClick={(event) => {
+                                        event.stopPropagation()
+                                        onNodeClick?.(node.id)
+                                    }}
+                                    onMouseEnter={() => {
+                                        setHoveredNapId(node.id)
+                                        if (!onNodeHover) return
+                                        const map = mapRef.current?.getMap()
+                                        if (!map) return
+                                        const point = map.project([node.lng, node.lat])
+                                        onNodeHover(node.id, { x: point.x, y: point.y })
+                                    }}
+                                    onMouseLeave={() => {
+                                        setHoveredNapId((prev) => (prev === node.id ? null : prev))
+                                        onNodeLeave?.()
+                                    }}
+                                >
+                                    <NapIcon
+                                        size={napIconSize}
+                                        state={toNapState(node.status)}
+                                        selected={isSelected}
+                                        alarm={hasAlarm}
+                                        animate={hasAlarm || isHovered ? "always" : "never"}
+                                        label={`${node.label || node.id} NAP ${node.status.toLowerCase()}`}
+                                    />
+                                </button>
+                            </Marker>
+                        )
+                    })}
+
+                    {shouldRenderOnuMarkers && effectiveVisibleOnuNodes.map((node) => {
+                        const isSelected = selectedNodeId === node.id
+                        const hasAlarm = Boolean(node.badge)
+                        const isHovered = hoveredOnuId === node.id
+                        return (
+                            <Marker
+                                key={node.id}
+                                latitude={node.lat}
+                                longitude={node.lng}
+                                anchor="center"
+                                style={{ zIndex: isSelected ? 2 : 1 }}
+                            >
+                                <button
+                                    type="button"
+                                    aria-label={`Abrir nodo ${node.label || node.id}`}
+                                    className="cursor-pointer border-0 bg-transparent p-0"
+                                    onClick={(event) => {
+                                        event.stopPropagation()
+                                        onNodeClick?.(node.id)
+                                    }}
+                                    onMouseEnter={() => {
+                                        setHoveredOnuId(node.id)
+                                        if (!onNodeHover) return
+                                        const map = mapRef.current?.getMap()
+                                        if (!map) return
+                                        const point = map.project([node.lng, node.lat])
+                                        onNodeHover(node.id, { x: point.x, y: point.y })
+                                    }}
+                                    onMouseLeave={() => {
+                                        setHoveredOnuId((prev) => (prev === node.id ? null : prev))
+                                        onNodeLeave?.()
+                                    }}
+                                >
+                                    <OnuIcon
+                                        size={onuIconSize}
+                                        state={toOnuState(node.status)}
+                                        selected={isSelected}
+                                        alarm={hasAlarm}
+                                        animate={hasAlarm || isHovered ? "always" : "never"}
+                                        variant="onu"
+                                        label={`${node.label || node.id} ONU ${node.status.toLowerCase()}`}
+                                    />
+                                </button>
+                            </Marker>
+                        )
+                    })}
                 </MapView>
             ) : null}
 
@@ -677,4 +1180,3 @@ export function NocMapCanvas({ nodes, impactMap, hexGeoJson, hexLayerMode = "imp
         </div>
     )
 }
-

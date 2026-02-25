@@ -1,4 +1,4 @@
-import type { ImpactConfig } from "./types"
+import type { ClientImpactConfig, ImpactConfig } from "./types"
 
 /**
  * Default Impact Score configuration.
@@ -35,5 +35,13 @@ export const DEFAULT_IMPACT_CONFIG: ImpactConfig = {
         DEGRADED: 0.6,
         UNKNOWN: 0.4,
         ONLINE: 0,
+    },
+} as const
+
+export const DEFAULT_CLIENT_IMPACT_CONFIG: ClientImpactConfig = {
+    unknownPolicy: "affected",
+    defaultArpu: 499,
+    severityThresholds: {
+        highAffectedClients: 25,
     },
 } as const

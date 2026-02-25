@@ -6,11 +6,16 @@ interface NodeDetailsResponse {
     status: "ONLINE" | "OFFLINE" | "DEGRADED" | "UNKNOWN"
     lastSeenAt: string
     type: "olt" | "nap" | "onu"
-    customer: {
+    customer?: {
         id: string
         name: string
         username: string
         plan: string
+    }
+    infrastructure?: {
+        siteName: string
+        capacityLabel: string
+        uplink: string
     }
     device: {
         id: string
@@ -75,6 +80,22 @@ function buildDeviceModel(type: NodeDetailsResponse["type"], seed: number): { mo
     return pool[seed % pool.length]
 }
 
+function buildInfrastructureData(type: NodeDetailsResponse["type"], id: string, seed: number) {
+    if (type === "olt") {
+        return {
+            siteName: `POP ${id.toUpperCase()}`,
+            capacityLabel: `${8 + (seed % 9)} PON / ${512 + (seed % 3) * 256} ONUs`,
+            uplink: "Core Metropolitana Oaxaca",
+        }
+    }
+
+    return {
+        siteName: `Caja ${id.toUpperCase()}`,
+        capacityLabel: `${8 + (seed % 2) * 8} puertos distribución`,
+        uplink: `OLT-${String((seed % 6) + 1).padStart(3, "0")}`,
+    }
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
     const { id } = await context.params
     const numericSeed = id
@@ -84,6 +105,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const type = inferTypeFromId(id)
     const status = pickStatus(numericSeed, type)
     const device = buildDeviceModel(type, numericSeed)
+    const isClientEdge = type === "onu"
 
     const payload: NodeDetailsResponse = {
         id,
@@ -91,12 +113,15 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         status,
         lastSeenAt: new Date(Date.now() - (numericSeed % 240) * 60_000).toISOString(),
         type,
-        customer: {
+        customer: isClientEdge ? {
             id: `cust-${(numericSeed % 120) + 1}`,
             name: `Cliente ${(numericSeed % 120) + 1}`,
             username: `usuario_${(numericSeed % 120) + 1}`,
             plan: ["30M", "80M", "150M", "300M"][numericSeed % 4],
-        },
+        } : undefined,
+        infrastructure: !isClientEdge
+            ? buildInfrastructureData(type, id, numericSeed)
+            : undefined,
         device: {
             id: `dev-${type}-${String((numericSeed % 99999) + 1).padStart(5, "0")}`,
             model: device.model,
