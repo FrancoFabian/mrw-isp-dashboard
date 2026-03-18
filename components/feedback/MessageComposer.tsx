@@ -84,10 +84,24 @@ interface MessageComposerProps {
     userName: string
 }
 
+type ImprovementFeedback = {
+    before: string
+    after: string
+    changed: boolean
+}
+
 const MAX_ATTACHMENTS = 4
 
 function attachmentId(): string {
     return `ATT-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`
+}
+
+function improvementPreview(value: string): string {
+    const normalized = value.replace(/\s+/g, " ").trim()
+    if (normalized.length <= 120) {
+        return normalized
+    }
+    return `${normalized.slice(0, 117)}...`
 }
 
 function uploadErrorMessage(error: unknown): string {
@@ -116,6 +130,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     const [isSending, setIsSending] = useState(false)
     const [isImproving, setIsImproving] = useState(false)
     const [originalMessageBeforeImprove, setOriginalMessageBeforeImprove] = useState<string | null>(null)
+    const [improvementFeedback, setImprovementFeedback] = useState<ImprovementFeedback | null>(null)
     const [contextMenuCollapsed, setContextMenuCollapsed] = useState(false)
     const [modelPreference, setModelPreference] = useState<"default" | "gpt-5-mini">("default")
     const [latestUsage, setLatestUsage] = useState<AssistantUsageMetrics | null>(null)
@@ -128,6 +143,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     const [submitError, setSubmitError] = useState<string | null>(null)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
     const attachmentsRef = useRef<ComposerAttachment[]>([])
 
     const { addMessage, canCreateSession, connectionMessage } = useChat()
@@ -451,6 +467,7 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
 
         setMessage("")
         setOriginalMessageBeforeImprove(null)
+        setImprovementFeedback(null)
         setTaskType("OTHER")
         setPriority("MEDIUM")
         for (const item of attachments) {
@@ -521,10 +538,29 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                 modelPreference,
             })
 
-            if (originalMessageBeforeImprove === null) {
+            const improvedMessage = improved.improvedMessage.trim().length > 0
+                ? improved.improvedMessage
+                : original
+            const changed = improvedMessage.trim() !== original.trim()
+
+            if (changed && originalMessageBeforeImprove === null) {
                 setOriginalMessageBeforeImprove(original)
             }
-            setMessage(improved.improvedMessage)
+            setMessage(improvedMessage)
+            setImprovementFeedback({
+                before: original,
+                after: improvedMessage,
+                changed,
+            })
+            requestAnimationFrame(() => {
+                const textarea = textareaRef.current
+                if (!textarea) {
+                    return
+                }
+                textarea.focus()
+                const caret = textarea.value.length
+                textarea.setSelectionRange(caret, caret)
+            })
 
             if (improved.usage) {
                 setLatestUsage(improved.usage)
@@ -541,6 +577,20 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
         if (originalMessageBeforeImprove === null) return
         setMessage(originalMessageBeforeImprove)
         setOriginalMessageBeforeImprove(null)
+        setImprovementFeedback(null)
+    }
+
+    const handleMessageChange = (nextMessage: string) => {
+        setMessage(nextMessage)
+        setImprovementFeedback((current) => {
+            if (!current) {
+                return null
+            }
+            return {
+                ...current,
+                after: nextMessage,
+            }
+        })
     }
 
     const handleInsertContextToken = () => {
@@ -768,9 +818,31 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                 </div>
             )}
 
+            {improvementFeedback && (
+                <div
+                    className={cn(
+                        "mb-3 rounded-lg border px-3 py-2 text-xs",
+                        improvementFeedback.changed
+                            ? "border-primary/35 bg-primary/10 text-foreground"
+                            : "border-border bg-secondary/30 text-muted-foreground"
+                    )}
+                >
+                    <p className="font-medium">
+                        {improvementFeedback.changed ? "Mejora aplicada al borrador" : "La IA no propuso cambios visibles"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                        Antes: {improvementPreview(improvementFeedback.before)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                        Ahora: {improvementPreview(improvementFeedback.after)}
+                    </p>
+                </div>
+            )}
+
             <div className={cn(
                 "rounded-xl border border-border bg-secondary/35 p-3",
-                isDragging && "border-primary/70 ring-1 ring-primary/50"
+                isDragging && "border-primary/70 ring-1 ring-primary/50",
+                improvementFeedback?.changed && "border-primary/60 ring-1 ring-primary/35"
             )}>
                 {hasImageAttachments && (
                     <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1">
@@ -818,8 +890,9 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
 
                 <div className="flex">
                     <textarea
+                        ref={textareaRef}
                         value={message}
-                        onChange={(e) => setMessage(e.target.value)}
+                        onChange={(e) => handleMessageChange(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onPaste={handlePaste}
                         onDragOver={handleDragOver}
