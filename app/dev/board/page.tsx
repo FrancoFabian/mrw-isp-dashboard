@@ -413,7 +413,7 @@ export default function KanbanBoardPage() {
                                                     className="block overflow-hidden rounded border border-border/60"
                                                 >
                                                     <img
-                                                        src={buildMediaUrl(attachment.mediaPath)}
+                                                        src={attachment.url ?? buildMediaUrl(attachment.mediaPath)}
                                                         alt="Referencia visual"
                                                         className="h-20 w-full object-cover"
                                                         loading="lazy"

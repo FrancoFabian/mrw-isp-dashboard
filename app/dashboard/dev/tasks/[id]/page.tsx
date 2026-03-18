@@ -191,7 +191,7 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
                                                     className="block w-full overflow-hidden rounded-md border border-border/60"
                                                 >
                                                     <img
-                                                        src={buildMediaUrl(attachment.mediaPath)}
+                                                        src={attachment.url ?? buildMediaUrl(attachment.mediaPath)}
                                                         alt="Referencia visual"
                                                         className="h-24 w-full object-cover"
                                                         loading="lazy"

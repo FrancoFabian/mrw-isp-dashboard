@@ -30,6 +30,7 @@ export interface TaskAttachment {
     mimeType: string
     sizeBytes: number
     createdAt: string
+    url?: string
 }
 
 export interface TaskItem {
