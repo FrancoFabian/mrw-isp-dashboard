@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAtomValue, useSetAtom } from "jotai"
 import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl"
 import MapView, { Layer, Marker, Source, type LayerProps, type MapRef } from "react-map-gl/maplibre"
@@ -14,8 +14,13 @@ import type { NodeClientImpact, NodeImpact } from "@/lib/impact/types"
 import { OltIcon, type OltState } from "@/components/network/icons/OltIcon"
 import { NapIcon, type NapState } from "@/components/network/icons/NpaIcon"
 import { OnuIcon, type OnuState } from "@/components/network/icons/OnuIcon"
+import { type BaseMapStyle, isSatelliteStyle, getBaseStyleUrl } from "./baseMapStyles"
 
-const styleUrl = `https://api.maptiler.com/maps/${process.env.NEXT_PUBLIC_MAPTILER_STYLE}/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`
+/**
+ * Fallback style URL used when no mapStyleUrl prop is provided.
+ * Built from env vars for backwards compatibility.
+ */
+const FALLBACK_STYLE_URL = `https://api.maptiler.com/maps/${process.env.NEXT_PUBLIC_MAPTILER_STYLE}/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`
 
 const INTERACTIVE_LAYER_IDS = ["noc-clusters", "noc-unclustered-points"]
 const NOC_ROAD_CASING_LAYER_ID = "noc-road-casing"
@@ -568,6 +573,14 @@ interface NocMapCanvasProps {
     selectedNodeId?: string | null
     hexGeoJson?: AnyGeoJson | null
     hexLayerMode?: MapOverlay
+    /** Base map style URL (from useBaseMapStyle hook). Falls back to env-based URL. */
+    mapStyleUrl?: string
+    /** Currently active base map style identifier. Defaults to 'dataviz'. */
+    currentBaseStyle?: BaseMapStyle
+    /** Called when the map style has fully loaded after a switch. */
+    onStyleReady?: () => void
+    /** Called when a map style fails to load. Receives the error event. */
+    onStyleError?: (e: unknown) => void
     onNodeClick?: (id: string) => void
     onNodeHover?: (id: string, point: { x: number; y: number }) => void
     onNodeLeave?: () => void
@@ -576,13 +589,17 @@ interface NocMapCanvasProps {
     className?: string
 }
 
-export function NocMapCanvas({
+function NocMapCanvasInner({
     nodes,
     impactMap,
     clientImpactMap,
     selectedNodeId,
     hexGeoJson,
     hexLayerMode = "impact",
+    mapStyleUrl,
+    currentBaseStyle = "dataviz",
+    onStyleReady,
+    onStyleError,
     onNodeClick,
     onNodeHover,
     onNodeLeave,
@@ -659,7 +676,7 @@ export function NocMapCanvas({
     }, [mapZoom])
     const napIconSize = useMemo(() => {
         const growthFactor = Math.min(1.15, 1 + Math.max(0, mapZoom - 16) * 0.08)
-        return Math.round(110 * growthFactor)
+        return Math.round(55 * growthFactor)
     }, [mapZoom])
     const onuIconSize = useMemo(() => {
         const growthFactor = Math.min(1.12, 1 + Math.max(0, mapZoom - 16) * 0.07)
@@ -670,8 +687,12 @@ export function NocMapCanvas({
         [nodes],
     )
     const hasMapTilerEnv = Boolean(process.env.NEXT_PUBLIC_MAPTILER_STYLE && process.env.NEXT_PUBLIC_MAPTILER_KEY)
+    const activeStyleUrl = mapStyleUrl ?? FALLBACK_STYLE_URL
 
     const ensureTunedStyle = useCallback(() => {
+        // Only apply dark fintech tuning to DataViz, NEVER to Satellite/Hybrid
+        if (isSatelliteStyle(currentBaseStyle)) return
+
         const map = mapRef.current?.getMap()
         if (!map) return
 
@@ -681,7 +702,7 @@ export function NocMapCanvas({
 
         applyNocBasemapTuning(map)
         tunedStyleRef.current = styleToken
-    }, [])
+    }, [currentBaseStyle])
 
     const refreshVisibleOltNodes = useCallback(() => {
         const map = mapRef.current?.getMap()
@@ -711,69 +732,56 @@ export function NocMapCanvas({
             setHasVisibleClusters(false)
         }
 
+        // ── BATCHED QUERY: single call for all node-type hit layers ──
+        const hitLayers: string[] = []
+        if (hasOltHitLayer) hitLayers.push(oltHitLayerId)
+        if (hasNapHitLayer) hitLayers.push(napHitLayerId)
+        if (hasOnuHitLayer) hitLayers.push(onuHitLayerId)
+
         const nextOlt = new Set<string>()
-        if (hasOltHitLayer) {
-            const oltFeatures = map.queryRenderedFeatures(undefined, { layers: [oltHitLayerId] })
-            for (const feature of oltFeatures) {
+        const nextNap = new Set<string>()
+        const nextOnu = new Set<string>()
+
+        if (hitLayers.length > 0) {
+            const allFeatures = map.queryRenderedFeatures(undefined, { layers: hitLayers })
+            for (const feature of allFeatures) {
                 const id = feature.properties?.id
-                if (id) nextOlt.add(String(id))
+                if (!id) continue
+                const layerId = feature.layer?.id
+                if (layerId === oltHitLayerId) nextOlt.add(String(id))
+                else if (layerId === napHitLayerId) nextNap.add(String(id))
+                else if (layerId === onuHitLayerId) nextOnu.add(String(id))
             }
         }
 
+        // Stable-reference updates (avoid re-renders when sets are identical)
         setVisibleOltIds((prev) => {
             if (prev.size === nextOlt.size) {
                 let same = true
                 for (const id of prev) {
-                    if (!nextOlt.has(id)) {
-                        same = false
-                        break
-                    }
+                    if (!nextOlt.has(id)) { same = false; break }
                 }
                 if (same) return prev
             }
             return nextOlt
         })
 
-        const nextNap = new Set<string>()
-        if (hasNapHitLayer) {
-            const napFeatures = map.queryRenderedFeatures(undefined, { layers: [napHitLayerId] })
-            for (const feature of napFeatures) {
-                const id = feature.properties?.id
-                if (id) nextNap.add(String(id))
-            }
-        }
-
         setVisibleNapIds((prev) => {
             if (prev.size === nextNap.size) {
                 let same = true
                 for (const id of prev) {
-                    if (!nextNap.has(id)) {
-                        same = false
-                        break
-                    }
+                    if (!nextNap.has(id)) { same = false; break }
                 }
                 if (same) return prev
             }
             return nextNap
         })
 
-        const nextOnu = new Set<string>()
-        if (hasOnuHitLayer) {
-            const onuFeatures = map.queryRenderedFeatures(undefined, { layers: [onuHitLayerId] })
-            for (const feature of onuFeatures) {
-                const id = feature.properties?.id
-                if (id) nextOnu.add(String(id))
-            }
-        }
-
         setVisibleOnuIds((prev) => {
             if (prev.size === nextOnu.size) {
                 let same = true
                 for (const id of prev) {
-                    if (!nextOnu.has(id)) {
-                        same = false
-                        break
-                    }
+                    if (!nextOnu.has(id)) { same = false; break }
                 }
                 if (same) return prev
             }
@@ -810,7 +818,7 @@ export function NocMapCanvas({
             return
         }
 
-        const host = new URL(styleUrl).host
+        const host = new URL(FALLBACK_STYLE_URL).host
         console.debug("[NocMapCanvas] MapTiler style resolved", {
             host,
             style: process.env.NEXT_PUBLIC_MAPTILER_STYLE,
@@ -912,7 +920,7 @@ export function NocMapCanvas({
     return (
         <div
             className={cn(
-                "relative h-full w-full overflow-hidden rounded-2xl border border-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04),0_22px_55px_rgba(2,6,23,0.45)]",
+                "relative h-full w-full overflow-hidden rounded-2xl max-md:rounded-none border border-white/10 max-md:border-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04),0_22px_55px_rgba(2,6,23,0.45)]",
                 className,
             )}
         >
@@ -926,7 +934,7 @@ export function NocMapCanvas({
                 <MapView
                     ref={mapRef}
                     initialViewState={{ latitude: 16.74, longitude: -96.71, zoom: 10 }}
-                    mapStyle={styleUrl}
+                    mapStyle={activeStyleUrl}
                     minZoom={4}
                     maxZoom={18}
                     interactiveLayerIds={INTERACTIVE_LAYER_IDS}
@@ -940,6 +948,8 @@ export function NocMapCanvas({
                         syncViewport()
                         ensureTunedStyle()
                         scheduleRefreshVisibleOltNodes()
+                        // If style is already loaded on mount, signal ready immediately
+                        onStyleReady?.()
                     }}
                     onMove={(event) => {
                         setMapZoom(event.viewState.zoom)
@@ -948,12 +958,25 @@ export function NocMapCanvas({
                     onStyleData={() => {
                         ensureTunedStyle()
                         scheduleRefreshVisibleOltNodes()
+                        // Signal style ready if the style is fully loaded
+                        const map = mapRef.current?.getMap()
+                        if (map?.isStyleLoaded()) {
+                            onStyleReady?.()
+                        }
+                    }}
+                    onIdle={() => {
+                        // Final fallback: style is guaranteed ready on idle
+                        onStyleReady?.()
                     }}
                     onMoveEnd={() => {
                         syncViewport()
                         scheduleRefreshVisibleOltNodes()
                     }}
                     onClick={handleMapClick}
+                    onError={(e) => {
+                        console.warn("[NocMapCanvas] Map error:", e)
+                        onStyleError?.(e)
+                    }}
                     onMouseMove={(e) => {
                         const map = mapRef.current?.getMap()
                         if (!map) return
@@ -1180,3 +1203,5 @@ export function NocMapCanvas({
         </div>
     )
 }
+
+export const NocMapCanvas = React.memo(NocMapCanvasInner)

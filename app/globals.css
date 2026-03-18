@@ -134,6 +134,19 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
+
+    /* Table surface tokens (multi-theme ready) */
+    --table-bg-from: 0 0% 7%;
+    --table-bg-to: 0 0% 0%;
+    --table-border: 0 0% 15% / 0.8;
+    --table-header-bg: 0 0% 0% / 0.2;
+    --table-divider: 0 0% 15% / 0.5;
+    --table-row-hover: 0 0% 100% / 0.03;
+    --table-row-selected: 0 0% 100% / 0.05;
+
+    /* Input surface tokens */
+    --input-surface: 0 0% 6%;
+    --input-border: 0 0% 13%;
   }
 
   * {
@@ -159,6 +172,51 @@
 
   .glass-card-hover {
     @apply bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl transition-all duration-200 hover:border-primary/30 hover:bg-card;
+  }
+
+  /* Custom horizontal/vertical scrollbar for dark UI */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #0f0f0f;
+    border-radius: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #222;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #333;
+  }
+
+  /* Ultra-thin NOC-style scrollbar (4px, transparent track, zinc-800 thumb) */
+  .noc-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #27272a transparent;
+  }
+
+  .noc-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .noc-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .noc-scrollbar::-webkit-scrollbar-thumb {
+    background: #27272a;
+    border-radius: 4px;
+  }
+
+  .noc-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #3f3f46;
   }
 }
 

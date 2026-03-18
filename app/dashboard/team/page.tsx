@@ -2,8 +2,13 @@
 
 import React from "react"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { cn } from "@/lib/utils"
+import { DataTable, type ColumnDef } from "@/components/ui/data-table"
+import { TableSearch } from "@/components/ui/table-search"
+import { FilterPills } from "@/components/ui/filter-pills"
+import { TablePagination } from "@/components/ui/table-pagination"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { mockStaff } from "@/mocks/staff"
 import {
@@ -58,6 +63,86 @@ export default function TeamPage() {
     {} as Record<string, number>
   )
 
+  // Pagination
+  const [page, setPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
+
+  // Reset pagination on filter change
+  useMemo(() => {
+    setPage(1)
+  }, [roleFilter, search])
+
+  // Slice team members based on page
+  const pagedStaff = useMemo(() => {
+    const start = (page - 1) * ITEMS_PER_PAGE
+    return filtered.slice(start, start + ITEMS_PER_PAGE)
+  }, [filtered, page])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE))
+
+  const columns: ColumnDef<StaffMember>[] = [
+    {
+      id: "name",
+      header: "Nombre",
+      cell: (member) => (
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium border",
+              staffRoleColors[member.role]
+            )}
+          >
+            {roleIcons[member.role]}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-zinc-100">
+              {member.firstName} {member.lastName}
+            </p>
+            <p className="truncate text-xs text-zinc-500 sm:hidden">
+              {staffRoleLabels[member.role]}
+            </p>
+          </div>
+        </div>
+      )
+    },
+    {
+      id: "role",
+      header: "Rol",
+      hiddenOnMobile: true,
+      cell: (member) => (
+        <span
+          className={cn(
+            "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium border",
+            staffRoleColors[member.role]
+          )}
+        >
+          {staffRoleLabels[member.role]}
+        </span>
+      )
+    },
+    {
+      id: "zone",
+      header: "Zona",
+      hiddenOnMobile: true,
+      cell: (member) => (
+        <span className="text-[13px] text-zinc-400">
+          {member.zone}
+        </span>
+      )
+    },
+    {
+      id: "status",
+      header: "Estado",
+      cell: (member) => (
+        <StatusBadge
+          label={staffStatusLabels[member.status]}
+          colorClass={staffStatusColors[member.status]}
+          dot={true}
+        />
+      )
+    }
+  ]
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
@@ -98,141 +183,56 @@ export default function TeamPage() {
         />
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Buscar por nombre o email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-10 w-full rounded-lg border border-input bg-secondary pl-9 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:max-w-sm"
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(["all", "admin", "installer", "collector", "support"] as const).map(
-            (r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setRoleFilter(r)}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                  roleFilter === r
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {r === "all" ? "Todos" : staffRoleLabels[r]}
-              </button>
-            )
-          )}
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         {/* Staff table */}
         <div className="xl:col-span-2">
-          <div className="glass-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-5">
-                      Nombre
-                    </th>
-                    <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground sm:table-cell sm:px-5">
-                      Rol
-                    </th>
-                    <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground md:table-cell md:px-5">
-                      Zona
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-5">
-                      Estado
-                    </th>
-                    <th className="px-4 py-3 sm:px-5">
-                      <span className="sr-only">Acciones</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filtered.map((member) => (
-                    <tr
-                      key={member.id}
-                      className={cn(
-                        "cursor-pointer transition-colors hover:bg-secondary/20",
-                        selected?.id === member.id && "bg-secondary/30"
-                      )}
-                      onClick={() => setSelected(member)}
-                    >
-                      <td className="px-4 py-3 sm:px-5">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium",
-                              staffRoleColors[member.role]
-                            )}
-                          >
-                            {roleIcons[member.role]}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {member.firstName} {member.lastName}
-                            </p>
-                            <p className="truncate text-xs text-muted-foreground sm:hidden">
-                              {staffRoleLabels[member.role]}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="hidden px-4 py-3 sm:table-cell sm:px-5">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                            staffRoleColors[member.role]
-                          )}
-                        >
-                          {staffRoleLabels[member.role]}
-                        </span>
-                      </td>
-                      <td className="hidden px-4 py-3 md:table-cell md:px-5">
-                        <span className="text-sm text-muted-foreground">
-                          {member.zone}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 sm:px-5">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                            staffStatusColors[member.status]
-                          )}
-                        >
-                          {staffStatusLabels[member.status]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 sm:px-5">
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {filtered.length === 0 && (
-              <div className="p-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No se encontraron miembros del equipo
-                </p>
+          <DataTable
+            data={pagedStaff}
+            columns={columns}
+            getRowId={(m) => m.id}
+            selectedRowId={selected?.id}
+            onRowClick={(row) => setSelected(row)}
+            emptyIcon={<UserCog className="h-12 w-12 text-zinc-600 mb-4" />}
+            emptyMessage="No se encontraron miembros del equipo"
+            header={
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <TableSearch
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Buscar por nombre o email..."
+                />
+                <FilterPills
+                  value={roleFilter}
+                  onChange={(val) => setRoleFilter(val as StaffRole | "all")}
+                  filters={[
+                    { value: "all", label: "Todos" },
+                    { value: "admin", label: staffRoleLabels["admin"] },
+                    { value: "installer", label: staffRoleLabels["installer"] },
+                    { value: "collector", label: staffRoleLabels["collector"] },
+                    { value: "support", label: staffRoleLabels["support"] },
+                  ]}
+                />
               </div>
+            }
+            footer={
+              <TablePagination
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                filteredItems={pagedStaff.length}
+                totalItems={filtered.length}
+              />
+            }
+            renderActions={() => (
+              <ChevronRight className="h-4 w-4 text-zinc-500" />
             )}
-          </div>
+          />
         </div>
 
         {/* Detail panel */}
         <div className="xl:col-span-1">
           {selected ? (
-            <div className="glass-card space-y-4 p-4 sm:p-5">
+            <div className="rounded-2xl border border-zinc-800/80 bg-black/50 backdrop-blur-md shadow-2xl p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-foreground">
                   Perfil del miembro
@@ -240,7 +240,7 @@ export default function TeamPage() {
                 <button
                   type="button"
                   onClick={() => setSelected(null)}
-                  className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  className="rounded-lg p-1 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-300"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -347,11 +347,11 @@ export default function TeamPage() {
               </p>
             </div>
           ) : (
-            <div className="glass-card flex flex-col items-center justify-center p-8 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
-                <UserCog className="h-6 w-6 text-muted-foreground" />
+            <div className="rounded-2xl border border-zinc-800/80 bg-black/50 backdrop-blur-md shadow-2xl flex flex-col items-center justify-center p-8 text-center h-full min-h-[400px]">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/5 mb-4">
+                <UserCog className="h-8 w-8 text-zinc-500" />
               </div>
-              <p className="mt-3 text-sm text-muted-foreground">
+              <p className="mt-3 text-sm text-zinc-400 max-w-[200px]">
                 Selecciona un miembro del equipo para ver su perfil completo
               </p>
             </div>

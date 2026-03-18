@@ -5,11 +5,14 @@ import { mockNodes } from "@/mocks/network"
 import type { NodeStatus, Olt, Nap, Onu } from "@/types/network"
 import { NodeCard } from "@/components/network/node-card"
 import { NetworkKpiCards, AlertsTable } from "@/components/network"
-import { EntityTable, type Column } from "@/components/network/EntityTable"
 import { StatusPill } from "@/components/network/StatusPill"
 import { SignalStrengthBadge } from "@/components/network/SignalStrengthBadge"
 import { useNetwork } from "@/stores/network-context"
 import { Globe, Wifi, AlertTriangle, WifiOff, Filter, Activity, Box, Server, Radio, Settings, Search } from "lucide-react"
+import { ModernTabs } from "@/components/ui/tabs-modern"
+import { TablePagination } from "@/components/ui/table-pagination"
+import { DataTable, type ColumnDef } from "@/components/ui/data-table"
+import { TableSearch } from "@/components/ui/table-search"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { format } from "date-fns"
@@ -32,125 +35,109 @@ const viewTabs: { label: string; value: ViewTab; icon: React.ComponentType<{ cla
   { label: "ONUs", value: "onus", icon: Wifi },
 ]
 
-const oltColumns: Column<Olt>[] = [
+const oltColumns: ColumnDef<Olt>[] = [
   {
-    key: "name",
+    id: "name",
     header: "Nombre",
-    render: (olt) => <span className="font-medium text-foreground">{olt.name}</span>,
-    sortable: true,
+    cell: (row) => <span className="text-sm font-medium text-zinc-200">{row.name}</span>,
   },
   {
-    key: "vendor",
+    id: "vendor_model",
     header: "Marca / Modelo",
-    render: (olt) => (
+    cell: (row) => (
       <div className="flex flex-col">
-        <span className="text-foreground">{olt.vendor}</span>
-        <span className="text-xs text-muted-foreground">{olt.model}</span>
+        <span className="text-sm font-medium text-zinc-200">{row.vendor}</span>
+        <span className="text-[13px] text-zinc-500">{row.model}</span>
       </div>
     ),
-    sortable: true,
   },
   {
-    key: "mgmtIp",
+    id: "mgmtIp",
     header: "IP Gestión",
-    render: (olt) => <span className="font-mono text-xs">{olt.mgmtIp}</span>,
-    sortable: true,
+    cell: (row) => <span className="font-mono text-[13px] text-zinc-400">{row.mgmtIp}</span>,
   },
   {
-    key: "status",
+    id: "status",
     header: "Estado",
-    render: (olt) => <StatusPill status={olt.status} />,
-    sortable: true,
+    cell: (row) => <StatusPill status={row.status} />,
   },
   {
-    key: "ponPortCount",
+    id: "ponPortCount",
     header: "Puertos PON",
-    render: (olt) => <span>{olt.ponPortCount}</span>,
-    sortable: true,
+    cell: (row) => <span className="text-sm font-medium text-zinc-200">{row.ponPortCount}</span>,
   },
   {
-    key: "location",
+    id: "locationName",
     header: "Ubicación",
-    render: (olt) => <span className="text-muted-foreground">{olt.locationName}</span>,
-    sortable: true,
+    cell: (row) => <span className="text-[13px] text-zinc-400">{row.locationName}</span>,
   },
 ]
 
-const napColumns: Column<Nap>[] = [
+const napColumns: ColumnDef<Nap>[] = [
   {
-    key: "name",
+    id: "name",
     header: "Nombre",
-    render: (nap) => <span className="font-medium text-foreground">{nap.name}</span>,
-    sortable: true,
+    cell: (row) => <span className="text-sm font-medium text-zinc-200">{row.name}</span>,
   },
   {
-    key: "type",
+    id: "type",
     header: "Tipo",
-    render: (nap) => <span className="capitalize">{nap.type.replace("splitter_", "1:")}</span>,
-    sortable: true,
+    cell: (row) => <span className="text-sm font-medium text-zinc-200 capitalize">{row.type.replace("splitter_", "1:")}</span>,
   },
   {
-    key: "location",
+    id: "locationName",
     header: "Ubicación",
-    render: (nap) => <span className="text-muted-foreground">{nap.locationName}</span>,
-    sortable: true,
+    cell: (row) => <span className="text-[13px] text-zinc-400">{row.locationName}</span>,
   },
   {
-    key: "totalPorts",
+    id: "totalPorts",
     header: "Puertos",
-    render: (nap) => <span>{nap.totalPorts} total</span>,
-    sortable: true,
+    cell: (row) => <span className="text-sm font-medium text-zinc-200">{row.totalPorts} total</span>,
   },
   {
-    key: "installedAt",
+    id: "installedAt",
     header: "Instalado",
-    render: (nap) => <span className="text-xs text-muted-foreground">{format(new Date(nap.installedAt), "d MMM yyyy", { locale: es })}</span>,
-    sortable: true,
+    cell: (row) => <span className="text-[13px] text-zinc-500">{format(new Date(row.installedAt), "d MMM yyyy", { locale: es })}</span>,
   },
 ]
 
-const onuColumns: Column<Onu>[] = [
+const onuColumns: ColumnDef<Onu>[] = [
   {
-    key: "serial",
+    id: "serial_id",
     header: "Serial / ID",
-    render: (onu) => (
+    cell: (row) => (
       <div className="flex flex-col">
-        <span className="font-mono font-medium text-foreground">{onu.serial}</span>
-        <span className="text-xs text-muted-foreground">{onu.id}</span>
+        <span className="font-mono text-sm font-medium text-zinc-200">{row.serial}</span>
+        <span className="text-[13px] text-zinc-500">{row.id}</span>
       </div>
     ),
-    sortable: true,
   },
   {
-    key: "status",
+    id: "status",
     header: "Estado",
-    render: (onu) => <StatusPill status={onu.status} />,
-    sortable: true,
+    cell: (row) => <StatusPill status={row.status} />,
   },
   {
-    key: "signal",
+    id: "signal",
     header: "Potencia (RX/TX)",
-    render: (onu) => (
-      <SignalStrengthBadge rxPowerDbm={onu.rxPowerDbm} txPowerDbm={onu.txPowerDbm} />
+    cell: (row) => (
+      <SignalStrengthBadge rxPowerDbm={row.rxPowerDbm} txPowerDbm={row.txPowerDbm} />
     ),
-    sortable: true,
   },
   {
-    key: "model",
+    id: "vendor_model",
     header: "Modelo",
-    render: (onu) => (
+    cell: (row) => (
       <div className="flex flex-col">
-        <span>{onu.vendor}</span>
-        <span className="text-xs text-muted-foreground">{onu.model}</span>
+        <span className="text-sm font-medium text-zinc-200">{row.vendor}</span>
+        <span className="text-[13px] text-zinc-500">{row.model}</span>
       </div>
     ),
-    sortable: true,
   },
   {
-    key: "lastSeen",
+    id: "lastSeen",
     header: "Última vez",
-    render: (onu) => <span className="text-xs text-muted-foreground">{format(new Date(onu.lastSeen), "d MMM HH:mm", { locale: es })}</span>,
-    sortable: true,
+    cell: (row) => <span className="text-[13px] text-zinc-500">{format(new Date(row.lastSeen), "d MMM HH:mm", { locale: es })}</span>,
   },
 ]
 
@@ -158,12 +145,55 @@ const onuColumns: Column<Onu>[] = [
 export default function NetworkPage() {
   const [activeTab, setActiveTab] = useState<ViewTab>("overview")
   const [statusFilter, setStatusFilter] = useState<NodeStatus | "all">("all")
+  const [oltSearch, setOltSearch] = useState("")
+  const [napSearch, setNapSearch] = useState("")
+  const [onuSearch, setOnuSearch] = useState("")
+  const [oltPage, setOltPage] = useState(1)
+  const [napPage, setNapPage] = useState(1)
+  const [onuPage, setOnuPage] = useState(1)
+  const ITEMS_PER_PAGE = 20
   const { stats, olts, naps, onus } = useNetwork()
 
+  // Tab 2 (Nodes) filtering
   const filteredNodes = useMemo(() => {
     if (statusFilter === "all") return mockNodes
     return mockNodes.filter((n) => n.status === statusFilter)
   }, [statusFilter])
+
+  // Table filtering
+  const filteredOlts = useMemo(() => {
+    if (!oltSearch) return olts
+    const q = oltSearch.toLowerCase()
+    return olts.filter(o => o.name.toLowerCase().includes(q) || o.mgmtIp.includes(q))
+  }, [olts, oltSearch])
+
+  const filteredNaps = useMemo(() => {
+    if (!napSearch) return naps
+    const q = napSearch.toLowerCase()
+    return naps.filter(n => n.name.toLowerCase().includes(q) || n.locationName.toLowerCase().includes(q))
+  }, [naps, napSearch])
+
+  const filteredOnus = useMemo(() => {
+    if (!onuSearch) return onus
+    const q = onuSearch.toLowerCase()
+    return onus.filter(o => o.serial.toLowerCase().includes(q) || o.id.toLowerCase().includes(q))
+  }, [onus, onuSearch])
+
+  // Pagination slicing
+  const pagedOlts = useMemo(() => {
+    const start = (oltPage - 1) * ITEMS_PER_PAGE
+    return filteredOlts.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredOlts, oltPage])
+
+  const pagedNaps = useMemo(() => {
+    const start = (napPage - 1) * ITEMS_PER_PAGE
+    return filteredNaps.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredNaps, napPage])
+
+  const pagedOnus = useMemo(() => {
+    const start = (onuPage - 1) * ITEMS_PER_PAGE
+    return filteredOnus.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredOnus, onuPage])
 
   const onlineCount = mockNodes.filter((n) => n.status === "online").length
   const degradedCount = mockNodes.filter((n) => n.status === "degraded").length
@@ -192,26 +222,20 @@ export default function NetworkPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex flex-wrap gap-2 border-b border-border pb-3">
-        {viewTabs.map((tab) => {
-          const Icon = tab.icon
-          return (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setActiveTab(tab.value)}
-              className={cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                activeTab === tab.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          )
-        })}
+      <div className="border-b border-border pb-3">
+        <ModernTabs
+          tabs={viewTabs.map((tab) => ({
+            id: tab.value,
+            label: (
+              <div className="flex items-center gap-2">
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+              </div>
+            )
+          }))}
+          value={activeTab}
+          onChange={(id) => setActiveTab(id as ViewTab)}
+        />
       </div>
 
       {/* GPON Overview Tab */}
@@ -375,12 +399,33 @@ export default function NetworkPage() {
               Nuevo OLT
             </Link>
           </div>
-          <EntityTable
-            data={olts}
-            columns={oltColumns}
-            keyExtractor={(item) => item.id}
-            emptyMessage="No hay OLTs registrados"
-          />
+          <div className="flex flex-col gap-4">
+            <DataTable
+              data={pagedOlts}
+              columns={oltColumns}
+              getRowId={(item) => item.id}
+              emptyMessage="No hay OLTs registrados"
+              header={
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <TableSearch
+                    value={oltSearch}
+                    onChange={(v) => { setOltSearch(v); setOltPage(1); }}
+                    placeholder="Buscar OLT (Nombre o IP)..."
+                  />
+                </div>
+              }
+              footer={
+                <TablePagination
+                  totalItems={olts.length}
+                  filteredItems={filteredOlts.length}
+                  currentPage={oltPage}
+                  totalPages={Math.ceil(filteredOlts.length / ITEMS_PER_PAGE)}
+                  onPageChange={setOltPage}
+                  itemName="OLTs"
+                />
+              }
+            />
+          </div>
         </div>
       )}
 
@@ -396,12 +441,33 @@ export default function NetworkPage() {
               Nuevo NAP
             </Link>
           </div>
-          <EntityTable
-            data={naps}
-            columns={napColumns}
-            keyExtractor={(item) => item.id}
-            emptyMessage="No hay NAPs registrados"
-          />
+          <div className="flex flex-col gap-4">
+            <DataTable
+              data={pagedNaps}
+              columns={napColumns}
+              getRowId={(item) => item.id}
+              emptyMessage="No hay NAPs registrados"
+              header={
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <TableSearch
+                    value={napSearch}
+                    onChange={(v) => { setNapSearch(v); setNapPage(1); }}
+                    placeholder="Buscar NAP por nombre o ubicación..."
+                  />
+                </div>
+              }
+              footer={
+                <TablePagination
+                  totalItems={naps.length}
+                  filteredItems={filteredNaps.length}
+                  currentPage={napPage}
+                  totalPages={Math.ceil(filteredNaps.length / ITEMS_PER_PAGE)}
+                  onPageChange={setNapPage}
+                  itemName="NAPs"
+                />
+              }
+            />
+          </div>
         </div>
       )}
 
@@ -417,12 +483,33 @@ export default function NetworkPage() {
               Provisionar ONU
             </Link>
           </div>
-          <EntityTable
-            data={onus}
-            columns={onuColumns}
-            keyExtractor={(item) => item.id}
-            emptyMessage="No hay ONUs registradas"
-          />
+          <div className="flex flex-col gap-4">
+            <DataTable
+              data={pagedOnus}
+              columns={onuColumns}
+              getRowId={(item) => item.id}
+              emptyMessage="No hay ONUs registradas"
+              header={
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <TableSearch
+                    value={onuSearch}
+                    onChange={(v) => { setOnuSearch(v); setOnuPage(1); }}
+                    placeholder="Buscar ONU por Serial o ID..."
+                  />
+                </div>
+              }
+              footer={
+                <TablePagination
+                  totalItems={onus.length}
+                  filteredItems={filteredOnus.length}
+                  currentPage={onuPage}
+                  totalPages={Math.ceil(filteredOnus.length / ITEMS_PER_PAGE)}
+                  onPageChange={setOnuPage}
+                  itemName="ONUs"
+                />
+              }
+            />
+          </div>
         </div>
       )}
     </div>

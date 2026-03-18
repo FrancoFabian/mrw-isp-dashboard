@@ -10,6 +10,8 @@ import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { Check, ExternalLink, Filter } from "lucide-react"
 import Link from "next/link"
+import { DataTable, type ColumnDef } from "@/components/ui/data-table"
+import { TablePagination } from "@/components/ui/table-pagination"
 
 interface AlertsTableProps {
     limit?: number
@@ -28,6 +30,8 @@ export function AlertsTable({
 }: AlertsTableProps) {
     const { alerts, acknowledgeAlert, getOltById, getNapById, getOnuById } = useNetwork()
     const [severityFilter, setSeverityFilter] = useState<AlertSeverity | "all">("all")
+    const [page, setPage] = useState(1)
+    const ITEMS_PER_PAGE = 20
 
     const filteredAlerts = useMemo(() => {
         let result = alerts.filter(a => !a.resolvedAt)
@@ -54,6 +58,12 @@ export function AlertsTable({
 
         return result
     }, [alerts, entityType, entityId, severityFilter, limit])
+
+    const pagedAlerts = useMemo(() => {
+        if (limit) return filteredAlerts
+        const start = (page - 1) * ITEMS_PER_PAGE
+        return filteredAlerts.slice(start, start + ITEMS_PER_PAGE)
+    }, [filteredAlerts, limit, page])
 
     const getEntityName = (alert: NetworkAlert): string => {
         switch (alert.entityType) {
@@ -89,6 +99,74 @@ export function AlertsTable({
         )
     }
 
+    const columns: ColumnDef<NetworkAlert>[] = [
+        {
+            id: "severity",
+            header: "Severidad",
+            cell: (row) => <AlertBadge severity={row.severity} size="sm" />,
+        },
+        {
+            id: "type",
+            header: "Tipo",
+            cell: (row) => <span className="text-sm font-medium text-zinc-200">{alertTypeLabels[row.type]}</span>,
+        },
+        {
+            id: "entity",
+            header: "Entidad",
+            cell: (row) => (
+                <Link
+                    href={getEntityLink(row)}
+                    className="inline-flex items-center gap-1 text-[13px] text-zinc-400 hover:text-zinc-200 transition-colors"
+                >
+                    {getEntityName(row)}
+                    <ExternalLink className="h-3 w-3" />
+                </Link>
+            ),
+        },
+        {
+            id: "message",
+            header: "Mensaje",
+            cell: (row) => (
+                <span className="text-[13px] text-zinc-500 max-w-xs truncate block" title={row.message}>
+                    {row.message}
+                </span>
+            ),
+        },
+        {
+            id: "time",
+            header: "Tiempo",
+            cell: (row) => (
+                <span className="text-[13px] text-zinc-500 whitespace-nowrap">
+                    {formatDistanceToNow(new Date(row.createdAt), { addSuffix: true, locale: es })}
+                </span>
+            ),
+        },
+        {
+            id: "actions",
+            header: "Acciones",
+            headerAlign: "right",
+            cell: (row) => (
+                <div className="flex justify-end">
+                    {!row.acknowledgedAt ? (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                acknowledgeAlert(row.id, "USR-001");
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 text-xs text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-colors"
+                        >
+                            <Check className="h-3 w-3" />
+                            ACK
+                        </button>
+                    ) : (
+                        <span className="text-xs text-muted-foreground">Reconocida</span>
+                    )}
+                </div>
+            ),
+        },
+    ]
+
     return (
         <div className={cn("space-y-3", className)}>
             {showFilters && (
@@ -99,12 +177,12 @@ export function AlertsTable({
                             <button
                                 key={sev}
                                 type="button"
-                                onClick={() => setSeverityFilter(sev)}
+                                onClick={() => { setSeverityFilter(sev); setPage(1); }}
                                 className={cn(
                                     "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
                                     severityFilter === sev
                                         ? "bg-primary text-primary-foreground"
-                                        : "bg-secondary text-muted-foreground hover:text-foreground"
+                                        : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
                                 )}
                             >
                                 {sev === "all" ? "Todas" : sev === "critical" ? "Críticas" : sev === "warning" ? "Advertencias" : "Info"}
@@ -114,63 +192,24 @@ export function AlertsTable({
                 </div>
             )}
 
-            <div className="glass-card overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-border text-left">
-                                <th className="px-4 py-3 text-xs font-medium text-muted-foreground">Severidad</th>
-                                <th className="px-4 py-3 text-xs font-medium text-muted-foreground">Tipo</th>
-                                <th className="px-4 py-3 text-xs font-medium text-muted-foreground">Entidad</th>
-                                <th className="px-4 py-3 text-xs font-medium text-muted-foreground">Mensaje</th>
-                                <th className="px-4 py-3 text-xs font-medium text-muted-foreground">Tiempo</th>
-                                <th className="px-4 py-3 text-xs font-medium text-muted-foreground">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {filteredAlerts.map((alert) => (
-                                <tr key={alert.id} className="hover:bg-secondary/30 transition-colors">
-                                    <td className="px-4 py-3">
-                                        <AlertBadge severity={alert.severity} size="sm" />
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-foreground">
-                                        {alertTypeLabels[alert.type]}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <Link
-                                            href={getEntityLink(alert)}
-                                            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                                        >
-                                            {getEntityName(alert)}
-                                            <ExternalLink className="h-3 w-3" />
-                                        </Link>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-muted-foreground max-w-xs truncate">
-                                        {alert.message}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
-                                        {formatDistanceToNow(new Date(alert.createdAt), { addSuffix: true, locale: es })}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        {!alert.acknowledgedAt ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => acknowledgeAlert(alert.id, "USR-001")}
-                                                className="inline-flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 text-xs text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-colors"
-                                            >
-                                                <Check className="h-3 w-3" />
-                                                ACK
-                                            </button>
-                                        ) : (
-                                            <span className="text-xs text-muted-foreground">Reconocida</span>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <DataTable
+                data={pagedAlerts}
+                columns={columns}
+                getRowId={(item) => item.id}
+                emptyMessage="No hay alertas registradas"
+                footer={
+                    !limit && (
+                        <TablePagination
+                            totalItems={alerts.length}
+                            filteredItems={filteredAlerts.length}
+                            currentPage={page}
+                            totalPages={Math.ceil(filteredAlerts.length / ITEMS_PER_PAGE)}
+                            onPageChange={setPage}
+                            itemName="alertas"
+                        />
+                    )
+                }
+            />
         </div>
     )
 }

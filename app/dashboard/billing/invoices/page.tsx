@@ -1,37 +1,150 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { mockInvoices } from "@/mocks/invoices"
 import type { InvoiceStatus } from "@/types/invoice"
-import { InvoiceStatusBadge } from "@/components/billing/InvoiceStatusBadge"
+import { invoiceStatusLabels, invoiceStatusColors } from "@/types/invoice"
+import { DataTable, type ColumnDef } from "@/components/ui/data-table"
+import { TableSearch } from "@/components/ui/table-search"
+import { TablePagination } from "@/components/ui/table-pagination"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { ModernSelectTailwind } from "@/components/ui/selection-modern"
+import { ModernDatePicker } from "@/components/ui/date-picker-modern"
+import { InvoiceKpisRow } from "@/components/billing/invoice-kpis"
+import type { Invoice } from "@/types/invoice"
 import {
     FileText,
-    Search,
-    Filter,
-    ChevronRight,
     Calendar,
-    DollarSign,
-    AlertTriangle,
-    Clock,
-    CheckCircle,
-    Plus
+    ChevronRight,
+    Plus,
+    ArrowRightLeft,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
 import Link from "next/link"
 
 const statusFilters: { label: string; value: InvoiceStatus | "all" }[] = [
     { label: "Todas", value: "all" },
+    { label: "Borrador", value: "draft" },
     { label: "Emitidas", value: "issued" },
     { label: "Pagadas", value: "paid" },
     { label: "Vencidas", value: "overdue" },
     { label: "Canceladas", value: "cancelled" },
 ]
 
+const defaultColumns = ["id", "customer", "period", "amount", "dueDate", "status", "arrow"]
+const columnOptions = [
+    { keyId: "id", label: "Factura" },
+    { keyId: "customer", label: "Cliente" },
+    { keyId: "period", label: "Período" },
+    { keyId: "amount", label: "Monto" },
+    { keyId: "dueDate", label: "Vencimiento" },
+    { keyId: "status", label: "Estado" },
+    { keyId: "arrow", label: "Detalle" },
+]
+
+const formatCurrency = (amount: number) =>
+    `$${amount.toLocaleString("en-US")}`
+
+const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })
+}
+
+const isSameDate = (dateStr: string, targetDate: Date) => {
+    const date = new Date(`${dateStr}T00:00:00`)
+    if (Number.isNaN(date.getTime())) return false
+
+    return (
+        date.getDate() === targetDate.getDate() &&
+        date.getMonth() === targetDate.getMonth() &&
+        date.getFullYear() === targetDate.getFullYear()
+    )
+}
+
+const columns: ColumnDef<Invoice>[] = [
+    {
+        id: "id",
+        header: "Factura",
+        cell: (row) => (
+            <span className="font-mono text-sm font-medium text-zinc-200">{row.id}</span>
+        ),
+    },
+    {
+        id: "customer",
+        header: "Cliente",
+        cell: (row) => (
+            <span className="text-sm font-medium text-zinc-200">{row.customerName}</span>
+        ),
+    },
+    {
+        id: "period",
+        header: "Período",
+        cell: (row) => (
+            <div className="flex items-center gap-1.5 text-[13px] text-zinc-400">
+                <Calendar className="h-3.5 w-3.5" />
+                {row.period}
+            </div>
+        ),
+    },
+    {
+        id: "amount",
+        header: "Monto",
+        cell: (row) => (
+            <span className="text-sm font-medium text-zinc-200 tracking-tight">{formatCurrency(row.total)}</span>
+        ),
+    },
+    {
+        id: "dueDate",
+        header: "Vencimiento",
+        hiddenOnMobile: true,
+        cell: (row) => (
+            <span className="text-[13px] text-zinc-400">{formatDate(row.dueDate)}</span>
+        ),
+    },
+    {
+        id: "status",
+        header: "Estado",
+        cell: (row) => (
+            <StatusBadge
+                label={invoiceStatusLabels[row.status]}
+                colorClass={invoiceStatusColors[row.status]}
+                dot
+            />
+        ),
+    },
+    {
+        id: "arrow",
+        header: "",
+        cell: () => (
+            <ChevronRight className="h-4 w-4 text-zinc-600" />
+        ),
+    },
+]
+
 export default function InvoicesPage() {
     const router = useRouter()
     const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "all">("all")
     const [searchQuery, setSearchQuery] = useState("")
+    const [debouncedQuery, setDebouncedQuery] = useState("")
+    const [isSearching, setIsSearching] = useState(false)
+    const [dueDateFilter, setDueDateFilter] = useState<Date | null>(null)
+    const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns)
+
+    useEffect(() => {
+        if (searchQuery === "") {
+            setDebouncedQuery("")
+            setIsSearching(false)
+            return
+        }
+
+        setIsSearching(true)
+        const timer = setTimeout(() => {
+            setDebouncedQuery(searchQuery)
+            setIsSearching(false)
+        }, 400)
+
+        return () => clearTimeout(timer)
+    }, [searchQuery])
 
     const filteredInvoices = useMemo(() => {
         let result = mockInvoices
@@ -40,211 +153,134 @@ export default function InvoicesPage() {
             result = result.filter((inv) => inv.status === statusFilter)
         }
 
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase()
+        if (dueDateFilter) {
+            result = result.filter((inv) => isSameDate(inv.dueDate, dueDateFilter))
+        }
+
+        if (debouncedQuery.trim()) {
+            const query = debouncedQuery.toLowerCase()
             result = result.filter(
                 (inv) =>
                     inv.customerName.toLowerCase().includes(query) ||
                     inv.id.toLowerCase().includes(query) ||
-                    inv.period.includes(query)
+                    inv.period.toLowerCase().includes(query)
             )
         }
 
         return result.sort((a, b) =>
             new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime()
         )
-    }, [statusFilter, searchQuery])
+    }, [statusFilter, dueDateFilter, debouncedQuery])
 
     // KPIs
+    const totalInvoices = mockInvoices.length
     const totalIssued = mockInvoices.filter((i) => i.status === "issued").length
     const totalOverdue = mockInvoices.filter((i) => i.status === "overdue").length
     const totalPaid = mockInvoices.filter((i) => i.status === "paid").length
+    const pendingCollection = mockInvoices.filter((i) => i.status === "issued" || i.status === "overdue").length
+    const clientsWithDebt = new Set(
+        mockInvoices
+            .filter((i) => i.status === "issued" || i.status === "overdue")
+            .map((i) => i.customerId)
+    ).size
     const totalRevenue = mockInvoices
         .filter((i) => i.status === "paid")
         .reduce((sum, i) => sum + i.total, 0)
 
-    const formatCurrency = (amount: number) =>
-        `$${amount.toLocaleString("en-US")}`
-
-    const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr)
-        return date.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })
-    }
-
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                        Facturas
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                        Gestiona las facturas internas de tus clientes
-                    </p>
-                </div>
-                <Link
-                    href="/dashboard/billing/invoices/new"
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                    <Plus className="h-4 w-4" />
-                    Nueva Factura
-                </Link>
-            </div>
-
             {/* KPIs */}
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <div className="glass-card flex items-center gap-3 p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-                        <FileText className="h-5 w-5 text-blue-400" />
-                    </div>
+            <InvoiceKpisRow
+                total={totalInvoices}
+                paid={totalPaid}
+                issued={totalIssued}
+                overdue={totalOverdue}
+                pendingCollection={pendingCollection}
+                clientsWithDebt={clientsWithDebt}
+                collectedAmount={totalRevenue}
+            />
+
+            <div className="mb-6 space-y-4">
+                <div>
                     <div>
-                        <p className="text-xs text-muted-foreground">Emitidas</p>
-                        <p className="text-lg font-bold text-foreground">{totalIssued}</p>
+                        <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white">Directorio de Facturas</h2>
+                        <p className="mt-1 text-sm text-zinc-400">Gestiona emisiones, vencimientos y pagos de facturas.</p>
                     </div>
                 </div>
-                <div className="glass-card flex items-center gap-3 p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10">
-                        <AlertTriangle className="h-5 w-5 text-red-400" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-muted-foreground">Vencidas</p>
-                        <p className="text-lg font-bold text-foreground">{totalOverdue}</p>
-                    </div>
-                </div>
-                <div className="glass-card flex items-center gap-3 p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
-                        <CheckCircle className="h-5 w-5 text-emerald-400" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-muted-foreground">Pagadas</p>
-                        <p className="text-lg font-bold text-foreground">{totalPaid}</p>
-                    </div>
-                </div>
-                <div className="glass-card flex items-center gap-3 p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                        <DollarSign className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-muted-foreground">Cobrado</p>
-                        <p className="text-lg font-bold text-foreground">{formatCurrency(totalRevenue)}</p>
+
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <Link
+                        href="/dashboard/billing/invoices/new"
+                        className="order-1 lg:order-2 inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-zinc-200"
+                    >
+                        <Plus className="h-4 w-4" />
+                        Nueva factura
+                    </Link>
+
+                    <div className="order-2 lg:order-1 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+                        <TableSearch
+                            value={searchQuery}
+                            onChange={setSearchQuery}
+                            placeholder="Buscar cliente o factura..."
+                            isSearching={isSearching}
+                        />
+
+                        <div className="hide-scrollbar flex w-full items-center gap-2 overflow-x-auto pb-2 sm:w-auto sm:pb-0">
+                            <ModernSelectTailwind
+                                items={statusFilters.map((filter) => ({ keyId: filter.value, label: filter.label }))}
+                                width="auto"
+                                placeholder="Estado"
+                                defaultSelectedKeys={[statusFilter]}
+                                onSelectionChange={(keys) => {
+                                    if (keys.length > 0) {
+                                        setStatusFilter(keys[0] as InvoiceStatus | "all")
+                                    }
+                                }}
+                            />
+
+                            <ModernDatePicker
+                                value={dueDateFilter}
+                                onChange={setDueDateFilter}
+                                placeholder="Vencimiento"
+                            />
+
+                            <ModernSelectTailwind
+                                items={columnOptions}
+                                multiple
+                                width="auto"
+                                placeholder="Columnas"
+                                displayValue="Columnas"
+                                icon={<ArrowRightLeft size={16} />}
+                                defaultSelectedKeys={visibleColumns}
+                                onSelectionChange={(keys) => setVisibleColumns(keys)}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                        type="text"
-                        placeholder="Buscar por cliente o factura..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-lg border-0 bg-secondary py-2 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            <DataTable<Invoice>
+                data={filteredInvoices}
+                columns={columns}
+                visibleColumns={visibleColumns}
+                isSearching={isSearching}
+                getRowId={(row) => row.id}
+                onRowClick={(row) => router.push(`/dashboard/billing/invoices/${row.id}`)}
+                emptyIcon={<FileText className="h-12 w-12 text-zinc-600" />}
+                emptyMessage={
+                    debouncedQuery
+                        ? `No se encontraron resultados para "${debouncedQuery}".`
+                        : "No se encontraron facturas con los filtros seleccionados."
+                }
+                footer={
+                    <TablePagination
+                        totalItems={mockInvoices.length}
+                        filteredItems={filteredInvoices.length}
+                        itemName="facturas"
+                        isLoading={isSearching}
                     />
-                </div>
-                <div className="flex items-center gap-2 overflow-x-auto">
-                    <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    {statusFilters.map((filter) => (
-                        <button
-                            key={filter.value}
-                            type="button"
-                            onClick={() => setStatusFilter(filter.value)}
-                            className={cn(
-                                "shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                                statusFilter === filter.value
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
-                            )}
-                        >
-                            {filter.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Table */}
-            <div className="glass-card overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-border/50 text-left">
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Factura
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Cliente
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Período
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Monto
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Vencimiento
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Estado
-                                </th>
-                                <th className="px-4 py-3"></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/30">
-                            {filteredInvoices.map((invoice) => (
-                                <tr
-                                    key={invoice.id}
-                                    onClick={() => router.push(`/dashboard/billing/invoices/${invoice.id}`)}
-                                    className="cursor-pointer transition-colors hover:bg-secondary/50"
-                                >
-                                    <td className="px-4 py-3">
-                                        <span className="font-mono text-sm text-foreground">
-                                            {invoice.id}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm text-foreground">
-                                            {invoice.customerName}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                            <Calendar className="h-3.5 w-3.5" />
-                                            {invoice.period}
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="font-medium text-foreground">
-                                            {formatCurrency(invoice.total)}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm text-muted-foreground">
-                                            {formatDate(invoice.dueDate)}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <InvoiceStatusBadge status={invoice.status} />
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {filteredInvoices.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <FileText className="h-12 w-12 text-muted-foreground/50" />
-                        <p className="mt-4 text-sm text-muted-foreground">
-                            No se encontraron facturas
-                        </p>
-                    </div>
-                )}
-            </div>
+                }
+            />
         </div>
     )
 }

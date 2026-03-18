@@ -33,6 +33,8 @@ export const mockPlans: Plan[] = [
     description: "Para quienes necesitan mas: gaming, trabajo remoto y descargas rapidas.",
     isPopular: false,
     clientCount: 89,
+    scheduledPrice: 749,
+    scheduledDate: "2026-04-01",
   },
   {
     id: "PLN-004",

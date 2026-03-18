@@ -2,7 +2,7 @@
 
 import React, { Suspense } from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { SidebarNav } from "@/components/dashboard/sidebar-nav"
 import { MrwOpticalLogo } from "@/components/icons/mrw-optical-logo"
 import Link from "next/link"
@@ -16,11 +16,16 @@ import { FeedbackChatWidget } from "@/components/feedback/FeedbackChatWidget"
 import { QueryProvider } from "@/components/providers/query-provider"
 import { Bell, Menu, Search } from "lucide-react"
 import { useSearchParams } from "next/navigation"
+import { useIsNocCompact } from "@/hooks/use-media-query"
 import "maplibre-gl/dist/maplibre-gl.css"
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [userCollapsed, setUserCollapsed] = useState(false)
+  const isNocCompact = useIsNocCompact() // auto-collapse below 1440px
   const searchParams = useSearchParams()
+
+  // Sidebar collapses automatically on compact viewports, or manually via hamburger
+  const sidebarCollapsed = isNocCompact || userCollapsed
 
   return (
     <div className="min-h-screen bg-background">
@@ -31,11 +36,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       />
 
       {/* Top bar (Island) */}
-      <header className="fixed left-4 right-4 top-4 z-40 flex h-16 items-center justify-between rounded-xl border border-border bg-gradient-to-br from-zinc-900/95 via-[#0a0a0a]/98 to-black/95 px-4 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md sm:px-6">
+      <header className="fixed left-4 right-4 top-4 z-50 flex h-16 items-center justify-between rounded-xl border border-border bg-gradient-to-br from-zinc-900/95 via-[#0a0a0a]/98 to-black/95 px-4 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md sm:px-6">
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onClick={() => setUserCollapsed(!userCollapsed)}
             className="hidden rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground lg:block"
           >
             <Menu className="h-5 w-5" />

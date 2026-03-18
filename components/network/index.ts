@@ -5,8 +5,6 @@ export { AlertBadge, AlertCountBadge } from "./AlertBadge"
 export { NetworkKpiCards, NetworkKpiCardsExtended } from "./NetworkKpiCards"
 export { AlertsTable } from "./AlertsTable"
 export { EventTimeline } from "./EventTimeline"
-export { EntityTable } from "./EntityTable"
-export type { Column } from "./EntityTable"
 export {
     NetworkEntityDrawer,
     DrawerSection,

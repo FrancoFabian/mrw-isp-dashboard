@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAtom, useAtomValue, useSetAtom } from "jotai"
+import { useIsNocPressure } from "@/hooks/use-media-query"
 import {
     X,
     Server,
@@ -33,6 +34,7 @@ import { useExpansionHeatmap } from "@/hooks/use-expansion-heatmap"
 import { useNetworkHealth } from "@/hooks/use-network-health"
 import { NocMapCanvas } from "./NocMapCanvas"
 import { NocMapToolbar } from "./NocMapToolbar"
+import { BaseMapToggle } from "./BaseMapToggle"
 import { HeatmapLegend } from "./HeatmapLegend"
 import { HexTooltip } from "./HexTooltip"
 import { ExpansionTooltip } from "./ExpansionTooltip"
@@ -45,6 +47,8 @@ import { DEFAULT_CLIENT_IMPACT_CONFIG } from "@/lib/impact/config"
 import type { ClientImpactFilter, ImpactTier } from "@/lib/impact/types"
 import type { TerritoryCell } from "@/lib/territory/types"
 import type { ExpansionCell } from "@/lib/expansion/types"
+import { useBaseMapStyle } from "@/hooks/useBaseMapStyle"
+import { ModernTabs } from "@/components/ui/tabs-modern"
 
 /* ══════════════════════════════════════════════════════════
    Auxiliary visual components (example-style)
@@ -107,10 +111,6 @@ const PANEL_GLOBAL_STYLES = `
   stroke-dasharray: 25 75;
   animation: sweep 2.5s linear infinite;
 }
-.panel-scrollbar::-webkit-scrollbar { width: 4px; }
-.panel-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.panel-scrollbar::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
-.panel-scrollbar::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
 `
 
 /* ══════════════════════════════════════════════════════════
@@ -132,6 +132,27 @@ export function NocMapShell() {
     const [panelTab, setPanelTab] = useState<"summary" | "clients">("summary")
     const [clientFilter, setClientFilter] = useState<ClientImpactFilter>("affected")
     const [clientPage, setClientPage] = useState(1)
+    const [isMobileSheetExpanded, setIsMobileSheetExpanded] = useState(false)
+    const isNocPressure = useIsNocPressure() // < 1280px
+
+    /* ── Base map style switcher ── */
+    const { currentStyle: baseStyle, styleUrl: baseStyleUrl, isSwitching: isStyleSwitching, setStyle: setBaseStyle, markStyleReady } = useBaseMapStyle()
+
+    const handleStyleError = useCallback(() => {
+        // If satellite fails, fall back to dataviz
+        if (baseStyle !== "dataviz") {
+            console.warn("[NocMapShell] Satellite style failed to load, falling back to DataViz.")
+            setBaseStyle("dataviz")
+        }
+    }, [baseStyle, setBaseStyle])
+
+    // ── Label suppression on pressure viewports ──
+    const setLayers = useSetAtom(layersAtom)
+    useEffect(() => {
+        if (isNocPressure && viewport.zoom < 13) {
+            setLayers((prev) => prev.labels ? { ...prev, labels: false } : prev)
+        }
+    }, [isNocPressure, viewport.zoom, setLayers])
 
     const CLIENTS_PER_PAGE = 10
 
@@ -252,6 +273,7 @@ export function NocMapShell() {
         setPanelTab("summary")
         setClientFilter("affected")
         setClientPage(1)
+        setIsMobileSheetExpanded(false)
     }, [selectedNodeId])
 
     useEffect(() => {
@@ -322,50 +344,64 @@ export function NocMapShell() {
         clientPage * CLIENTS_PER_PAGE,
     )
 
-    return (
-        <div className="relative flex h-[calc(100vh-9rem)] flex-col overflow-hidden rounded-2xl border border-white/8 bg-slate-950/70 shadow-2xl shadow-black/35">
-            {/* Health summary card */}
-            <div className="pointer-events-none absolute left-5/8 top-3 z-510 -translate-x-1/2">
-                <NetworkHealthCard health={health} onFilterByStatus={handleFilterByStatus} />
-            </div>
+    const handleNodeClick = useCallback((id: string) => {
+        setSelectedNodeId((prev) => (prev === id ? null : id))
+    }, [setSelectedNodeId])
 
-            <div className="pointer-events-none absolute left-0 right-0 top-6 z-500 flex items-start justify-between p-3">
+    const handleNodeHover = useCallback((id: string, point: { x: number; y: number }) => {
+        setHoveredNodeId(id)
+        setHoveredNodePos(point)
+    }, [])
+
+    const handleNodeLeave = useCallback(() => {
+        setHoveredNodeId(null)
+        setHoveredNodePos(null)
+    }, [])
+
+    const handleHexHoverSafe = useMemo(() => layers.heatmap ? handleHexHover : undefined, [layers.heatmap, handleHexHover])
+    const handleHexLeaveSafe = useMemo(() => layers.heatmap ? handleHexLeave : undefined, [layers.heatmap, handleHexLeave])
+
+    const renderCanvas = () => (
+        <NocMapCanvas
+            nodes={nodes}
+            impactMap={impactMap}
+            clientImpactMap={clientImpactMap}
+            selectedNodeId={selectedNodeId}
+            hexGeoJson={activeGeoJson}
+            hexLayerMode={overlay}
+            mapStyleUrl={baseStyleUrl}
+            currentBaseStyle={baseStyle}
+            onStyleReady={markStyleReady}
+            onStyleError={handleStyleError}
+            onNodeClick={handleNodeClick}
+            onNodeHover={handleNodeHover}
+            onNodeLeave={handleNodeLeave}
+            onHexHover={handleHexHoverSafe}
+            onHexLeave={handleHexLeaveSafe}
+        />
+    )
+
+    return (
+        <div className="relative flex max-md:-mx-4 max-md:-my-4 max-md:h-[calc(100dvh-6rem)] md:h-[calc(100vh-9rem)] flex-col overflow-hidden rounded-2xl max-md:rounded-none border border-white/8 max-md:border-none bg-slate-950/70 shadow-2xl shadow-black/35">
+            <div className="pointer-events-none absolute left-0 right-0 top-3 z-20 flex items-start justify-between gap-3 p-3">
                 <NocMapToolbar
                     onFocusMyNodes={handleFocusMyNodes}
                     inlineMessage={toolbarMessage}
                 />
 
-                <div className="flex items-center gap-2">
-                    {/* H3 loading indicator */}
-                    {hexLoading && (
-                        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-violet-500/20 bg-violet-950/60 px-2.5 py-1.5 text-xs font-medium text-violet-400 backdrop-blur-xl">
-                            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-violet-500" />
-                            Cargando H3…
-                        </div>
-                    )}
-
-                    {/* Impact summary pill */}
-                    {stats.byTier.CRITICAL > 0 && (
-                        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-950/60 px-2.5 py-1.5 text-xs font-medium text-red-400 backdrop-blur-xl">
-                            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
-                            {stats.byTier.CRITICAL} críticos
-                        </div>
-                    )}
-
-                    {/* Expansion summary pill */}
-                    {isExpansionOverlay && ranking.length > 0 && (
-                        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-teal-500/20 bg-teal-950/60 px-2.5 py-1.5 text-xs font-medium text-teal-400 backdrop-blur-xl">
-                            <span className="inline-block h-2 w-2 rounded-full bg-teal-500" />
-                            {ranking.filter((c) => c.opportunityTier === "PRIORITY").length} prioritarias
-                        </div>
-                    )}
-
-                    {isFetching && (
-                        <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-white/6 bg-slate-900/70 px-3 py-1.5 text-xs text-sky-400 backdrop-blur-xl">
-                            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400" />
-                            Actualizando.
-                        </div>
-                    )}
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                    {/* Health summary card — hidden below lg */}
+                    <div className="pointer-events-auto hidden lg:block">
+                        <NetworkHealthCard health={health} onFilterByStatus={handleFilterByStatus} forceCollapsed={isNocPressure} />
+                    </div>
+                    {/* Base map style toggle */}
+                    <div className="pointer-events-auto">
+                        <BaseMapToggle
+                            currentStyle={baseStyle}
+                            isSwitching={isStyleSwitching}
+                            onSwitch={setBaseStyle}
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -378,25 +414,7 @@ export function NocMapShell() {
                         </div>
                     </div>
                 ) : (
-                    <NocMapCanvas
-                        nodes={nodes}
-                        impactMap={impactMap}
-                        clientImpactMap={clientImpactMap}
-                        selectedNodeId={selectedNodeId}
-                        hexGeoJson={activeGeoJson}
-                        hexLayerMode={overlay}
-                        onNodeClick={(id) => setSelectedNodeId((prev) => (prev === id ? null : id))}
-                        onNodeHover={(id, point) => {
-                            setHoveredNodeId(id)
-                            setHoveredNodePos(point)
-                        }}
-                        onNodeLeave={() => {
-                            setHoveredNodeId(null)
-                            setHoveredNodePos(null)
-                        }}
-                        onHexHover={layers.heatmap ? handleHexHover : undefined}
-                        onHexLeave={layers.heatmap ? handleHexLeave : undefined}
-                    />
+                    renderCanvas()
                 )}
 
                 <NodeImpactTooltip
@@ -424,14 +442,14 @@ export function NocMapShell() {
 
                 {/* Expansion ranking panel (left) */}
                 {isExpansionOverlay && (
-                    <div className="absolute bottom-16 left-4 z-500">
+                    <div className="absolute bottom-16 left-4 z-20">
                         <ExpansionRanking ranking={ranking} visible={isExpansionOverlay} />
                     </div>
                 )}
 
                 {/* ROI Simulator panel (right side) */}
                 {roiCell && (
-                    <div className="absolute right-4 top-1/2 z-500 -translate-y-1/2">
+                    <div className="absolute right-4 top-1/2 z-20 -translate-y-1/2">
                         <RoiSimulatorPanel
                             cell={roiCell}
                             onClose={() => setRoiCell(null)}
@@ -442,7 +460,7 @@ export function NocMapShell() {
 
             {/* Heatmap legend (bottom-left or bottom-center when ranking is showing) */}
             {layers.heatmap && (
-                <div className={`absolute z-500 ${isExpansionOverlay ? "bottom-14 left-80" : "bottom-14 left-4"}`}>
+                <div className={`absolute z-20 ${isExpansionOverlay ? "bottom-14 left-80" : "bottom-14 left-4"}`}>
                     <HeatmapLegend mode={heatmapMode} overlay={overlay} visible={layers.heatmap} />
                 </div>
             )}
@@ -456,8 +474,8 @@ export function NocMapShell() {
                     <style>{PANEL_GLOBAL_STYLES}</style>
 
                     {/* ── DESKTOP ASIDE ── */}
-                    <aside className="absolute right-4 top-1/2 z-500 hidden w-[350px] -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/40 via-[#050505]/90 to-black/95 text-zinc-300 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:flex"
-                        style={{ maxHeight: "75vh" }}
+                    <aside className="absolute right-4 top-1/2 z-500 hidden -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/40 via-[#050505]/90 to-black/95 text-zinc-300 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-xl lg:flex"
+                        style={{ maxHeight: "75vh", width: "clamp(280px, 22vw, 380px)" }}
                     >
                         {/* Subtle top gradient overlay */}
                         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/5 to-transparent" />
@@ -483,35 +501,21 @@ export function NocMapShell() {
 
                         {/* ── TABS ── */}
                         <div className="relative z-10 flex-shrink-0 px-3.5 pt-3">
-                            <div className="flex rounded-lg bg-black p-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setPanelTab("summary")}
-                                    className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${panelTab === "summary"
-                                        ? "border border-zinc-800 bg-[#18181b] text-zinc-100 shadow-sm"
-                                        : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
-                                        }`}
-                                >
-                                    Resumen
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setPanelTab("clients")}
-                                    className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${panelTab === "clients"
-                                        ? "border border-zinc-800 bg-[#18181b] text-zinc-100 shadow-sm"
-                                        : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
-                                        }`}
-                                >
-                                    Clientes
-                                </button>
-                            </div>
+                            <ModernTabs
+                                tabs={[
+                                    { id: "summary", label: "Resumen" },
+                                    { id: "clients", label: "Clientes" }
+                                ]}
+                                value={panelTab}
+                                onChange={(id) => setPanelTab(id as "summary" | "clients")}
+                            />
                         </div>
 
                         {/* ── CONTENT with slide animation ── */}
                         <div className="relative z-10 min-h-0 overflow-hidden">
 
                             {/* ═══════ TAB 1: RESUMEN ═══════ */}
-                            <div className={`w-full space-y-4 overflow-y-auto px-3.5 pb-3.5 pt-3 panel-scrollbar transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${panelTab === "summary" ? "relative translate-x-0 opacity-100 max-h-[60vh]" : "absolute top-0 left-0 -translate-x-8 opacity-0 pointer-events-none"
+                            <div className={`w-full space-y-4 overflow-y-auto px-3.5 pb-3.5 pt-3 noc-scrollbar transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${panelTab === "summary" ? "relative translate-x-0 opacity-100 max-h-[60vh]" : "absolute top-0 left-0 -translate-x-8 opacity-0 pointer-events-none"
                                 }`}>
 
                                 {/* Basic Info Grid */}
@@ -816,7 +820,7 @@ export function NocMapShell() {
 
                                 {/* Client cards list */}
                                 <div
-                                    className="mt-4 max-h-[340px] space-y-2 overflow-y-auto pr-2 pb-4 panel-scrollbar"
+                                    className="mt-4 max-h-[340px] space-y-2 overflow-y-auto pr-2 pb-4 noc-scrollbar"
                                     style={{
                                         WebkitMaskImage: (!panelLoading && paginatedClients.length > 4) || panelLoading
                                             ? "linear-gradient(to bottom, black 85%, transparent 100%)"
@@ -930,57 +934,314 @@ export function NocMapShell() {
                         </div>
                     </aside>
 
-                    {/* ── MOBILE BOTTOM SHEET ── */}
-                    <aside className="absolute bottom-0 left-0 right-0 z-500 rounded-t-xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/95 via-[#050505]/95 to-black/95 p-4 shadow-2xl shadow-black/40 backdrop-blur-xl sm:hidden">
-                        <div className="mb-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-zinc-100">
-                                    {selectedDetail.label || selectedDetail.id}
-                                </span>
-                                <PanelStatusBadge status={selectedDetail.status} />
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setSelectedNodeId(null)}
-                                className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-300"
-                            >
-                                <X size={16} />
-                            </button>
+                    {/* ── MOBILE/TABLET BOTTOM SHEET ── */}
+                    <aside
+                        className={`absolute bottom-0 left-0 right-0 z-25 flex flex-col rounded-t-2xl border-t border-zinc-800/60 bg-linear-to-b from-zinc-900/98 to-black/98 shadow-[0_-8px_32px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-all duration-300 ease-in-out lg:hidden touch-pan-y ${isMobileSheetExpanded ? "h-[85dvh]" : "h-auto"
+                            }`}
+                        onClick={() => !isMobileSheetExpanded && setIsMobileSheetExpanded(true)}
+                        onTouchStart={(e) => {
+                            e.currentTarget.dataset.startY = e.touches[0].clientY.toString()
+                        }}
+                        onTouchEnd={(e) => {
+                            const startY = parseFloat(e.currentTarget.dataset.startY || "0")
+                            const endY = e.changedTouches[0].clientY
+                            const deltaY = endY - startY
+
+                            if (Math.abs(deltaY) > 30) {
+                                if (deltaY < 0 && !isMobileSheetExpanded) {
+                                    setIsMobileSheetExpanded(true)
+                                } else if (deltaY > 0 && isMobileSheetExpanded) {
+                                    setIsMobileSheetExpanded(false)
+                                }
+                            }
+                        }}
+                    >
+                        {/* Drag Handle */}
+                        <div
+                            className="flex w-full cursor-pointer items-center justify-center pt-3 pb-2 touch-none"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsMobileSheetExpanded(!isMobileSheetExpanded);
+                            }}
+                        >
+                            <div className="h-1.5 w-12 rounded-full bg-zinc-600/60" />
                         </div>
 
-                        {/* Compact health bar */}
-                        <div className="mb-2 flex h-1.5 w-full overflow-hidden rounded-full border border-zinc-800 bg-[#09090b]">
-                            <div style={{ width: `${onlinePct}%` }} className="bg-gradient-to-r from-emerald-700 to-emerald-400" />
-                            <div style={{ width: `${degradedPct}%` }} className="bg-gradient-to-r from-amber-600 to-yellow-400" />
-                            <div style={{ width: `${affectedPct}%` }} className="bg-gradient-to-r from-red-800 to-rose-400" />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                            <div>Tipo: <span className="text-zinc-200">{selectedDetail.type?.toUpperCase() || "-"}</span></div>
-                            <div>Score: <span className="font-medium text-emerald-400">{selectedImpact?.impactScore ?? "-"}</span></div>
-                            <div>Afectados: <span className="text-zinc-200">{affectedClients}</span></div>
-                            <div>MRR: <span className="font-medium text-amber-400">${(selectedClientImpact?.affectedMRR ?? 0).toLocaleString()}</span></div>
-                            <div className="col-span-2 truncate">
-                                {isClientEdgeNode ? "Cliente" : "Sitio"}:{" "}
-                                <span className="text-zinc-200">
-                                    {isClientEdgeNode
-                                        ? (nodeDetails?.customer?.name || "Sin datos")
-                                        : (nodeDetails?.infrastructure?.siteName || selectedDetail.label || "Sin datos")}
-                                </span>
+                        <div className="flex-1 overflow-hidden flex flex-col px-4 pb-4">
+                            <div className="mb-3 flex items-start justify-between">
+                                <div className="flex flex-col gap-1.5">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-bold text-zinc-100">
+                                            {selectedDetail.label || selectedDetail.id}
+                                        </span>
+                                        <PanelStatusBadge status={selectedDetail.status} />
+                                    </div>
+                                    {isMobileSheetExpanded && (
+                                        <div className="text-xs text-zinc-500">
+                                            {isClientEdgeNode ? "Cliente" : "Sitio"}:{" "}
+                                            <span className="text-zinc-300">
+                                                {isClientEdgeNode
+                                                    ? (nodeDetails?.customer?.name || "Sin datos")
+                                                    : (nodeDetails?.infrastructure?.siteName || selectedDetail.label || "Sin datos")}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedNodeId(null);
+                                    }}
+                                    className="rounded-md p-1.5 -mr-1.5 -mt-1.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-300"
+                                >
+                                    <X size={18} />
+                                </button>
                             </div>
+
+                            {/* Compact health bar ALWAYS VISIBLE */}
+                            <div className="mb-3 flex h-1.5 w-full shrink-0 overflow-hidden rounded-full border border-zinc-800 bg-[#09090b]">
+                                <div style={{ width: `${onlinePct}%` }} className="bg-gradient-to-r from-emerald-700 to-emerald-400" />
+                                <div style={{ width: `${degradedPct}%` }} className="bg-gradient-to-r from-amber-600 to-yellow-400" />
+                                <div style={{ width: `${affectedPct}%` }} className="bg-gradient-to-r from-red-800 to-rose-400" />
+                            </div>
+
+                            {!isMobileSheetExpanded ? (
+                                /* COMPACT VIEW (when not expanded) */
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-zinc-400">
+                                    <div className="flex justify-between"><span>Tipo:</span> <span className="text-zinc-200">{selectedDetail.type?.toUpperCase() || "-"}</span></div>
+                                    <div className="flex justify-between"><span>Score:</span> <span className="font-medium text-emerald-400">{selectedImpact?.impactScore ?? "-"}</span></div>
+                                    <div className="flex justify-between"><span>Afectados:</span> <span className="text-zinc-200">{affectedClients}</span></div>
+                                    <div className="flex justify-between"><span>MRR:</span> <span className="font-medium text-amber-400">${(selectedClientImpact?.affectedMRR ?? 0).toLocaleString()}</span></div>
+                                    <div className="col-span-2 mt-1 truncate border-t border-white/5 pt-2">
+                                        {isClientEdgeNode ? "Cliente" : "Sitio"}:{" "}
+                                        <span className="text-zinc-200">
+                                            {isClientEdgeNode
+                                                ? (nodeDetails?.customer?.name || "Sin datos")
+                                                : (nodeDetails?.infrastructure?.siteName || selectedDetail.label || "Sin datos")}
+                                        </span>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* EXPANDED VIEW */
+                                <div className="flex-1 overflow-y-auto noc-scrollbar space-y-4 pr-1 pb-4">
+                                    {/* Tabs for OLT/NAP */}
+                                    {!isClientEdgeNode && (
+                                        <div className="flex rounded-lg bg-black p-1 shrink-0 mb-2">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setPanelTab("summary");
+                                                }}
+                                                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${panelTab === "summary"
+                                                    ? "border border-zinc-800 bg-[#18181b] text-zinc-100 shadow-sm"
+                                                    : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
+                                                    }`}
+                                            >
+                                                Resumen
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setPanelTab("clients");
+                                                }}
+                                                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${panelTab === "clients"
+                                                    ? "border border-zinc-800 bg-[#18181b] text-zinc-100 shadow-sm"
+                                                    : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
+                                                    }`}
+                                            >
+                                                Clientes
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* TAB: SUMMARY / Default ONU view */}
+                                    {(isClientEdgeNode || panelTab === "summary") && (
+                                        <>
+                                            <div className="grid grid-cols-2 gap-3 shrink-0">
+                                                <div className="rounded-lg border border-white/5 bg-black/40 p-3">
+                                                    <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Afectados</div>
+                                                    <div className="text-xl font-bold text-red-500">{affectedClients}</div>
+                                                    <div className="text-xs text-zinc-500">De {totalClients} totales</div>
+                                                </div>
+                                                <div className="rounded-lg border border-white/5 bg-black/40 p-3">
+                                                    <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">MRR en Riesgo</div>
+                                                    <div className="text-xl font-bold text-amber-500">${(selectedClientImpact?.affectedMRR ?? 0).toLocaleString()}</div>
+                                                    <div className="text-xs text-zinc-500">Impacto Mensual</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Additional info for OLT/NAP */}
+                                            {!isClientEdgeNode && (
+                                                <div className="space-y-3 shrink-0">
+                                                    {/* Infra */}
+                                                    <div className="rounded-lg border border-white/5 bg-black/40 p-3.5">
+                                                        <div className="mb-3 flex items-center gap-2">
+                                                            <Server size={14} className="text-zinc-400" />
+                                                            <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Infraestructura</h3>
+                                                        </div>
+                                                        <div className="space-y-2 text-[13px]">
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Sitio</span><span className="font-medium text-zinc-200">{nodeDetails?.infrastructure?.siteName || selectedDetail.label || selectedDetail.id}</span></div>
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Capacidad</span><span className="text-zinc-200">{nodeDetails?.infrastructure?.capacityLabel || "Sin datos"}</span></div>
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Uplink</span><span className="text-zinc-200">{nodeDetails?.infrastructure?.uplink || "Sin datos"}</span></div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Dispositivo */}
+                                                    <div className="rounded-lg border border-white/5 bg-black/40 p-3.5">
+                                                        <div className="mb-3 flex items-center gap-2">
+                                                            <Wifi size={14} className="text-zinc-400" />
+                                                            <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Equipo</h3>
+                                                        </div>
+                                                        <div className="space-y-2 text-[13px]">
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Modelo</span><span className="text-zinc-200">{nodeDetails?.device.model || "Sin datos"}</span></div>
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Vendor</span><span className="text-zinc-200">{nodeDetails?.device.vendor || "Sin datos"}</span></div>
+                                                            <div className="flex justify-between"><span className="text-zinc-500">IP</span><span className="font-mono text-zinc-300 bg-white/5 px-1.5 py-0.5 rounded text-xs border border-white/10">{nodeDetails?.device.ip || "0.0.0.0"}</span></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Additional info for ONU */}
+                                            {isClientEdgeNode && (
+                                                <div className="space-y-3 shrink-0">
+                                                    {/* Cliente Asignado */}
+                                                    <div className="rounded-lg border border-white/5 bg-black/40 p-3.5">
+                                                        <div className="mb-3 flex items-center gap-2">
+                                                            <Users size={14} className="text-zinc-400" />
+                                                            <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Cliente Asignado</h3>
+                                                        </div>
+                                                        <div className="space-y-2 text-[13px]">
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Nombre</span><span className="font-medium text-zinc-200">{nodeDetails?.customer?.name || "Sin datos"}</span></div>
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Usuario</span><span className="text-zinc-200">{nodeDetails?.customer?.username || "Sin usuario"}</span></div>
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Plan</span><span className="text-zinc-200">{nodeDetails?.customer?.plan || "Sin plan"}</span></div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* CPE */}
+                                                    <div className="rounded-lg border border-white/5 bg-black/40 p-3.5">
+                                                        <div className="mb-3 flex items-center gap-2">
+                                                            <Wifi size={14} className="text-zinc-400" />
+                                                            <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Equipo (CPE)</h3>
+                                                        </div>
+                                                        <div className="space-y-2 text-[13px]">
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Modelo</span><span className="text-zinc-200">{nodeDetails?.device.model || "Sin datos"}</span></div>
+                                                            <div className="flex justify-between"><span className="text-zinc-500">Vendor</span><span className="text-zinc-200">{nodeDetails?.device.vendor || "Sin datos"}</span></div>
+                                                            <div className="flex justify-between"><span className="text-zinc-500">IP</span><span className="font-mono text-zinc-300 bg-white/5 px-1.5 py-0.5 rounded text-xs border border-white/10">{nodeDetails?.device.ip || "0.0.0.0"}</span></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+
+                                    {/* TAB: CLIENTES VIEW (Only for non-ONU nodes) */}
+                                    {!isClientEdgeNode && panelTab === "clients" && (
+                                        <div className="flex flex-col gap-3 shrink-0">
+                                            {/* Filters */}
+                                            <div className="flex shrink-0 gap-2 pb-1 overflow-x-auto no-scrollbar">
+                                                {(["all", "affected", "degraded"] as const).map((f) => (
+                                                    <button
+                                                        key={f}
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setClientFilter(f);
+                                                        }}
+                                                        disabled={panelLoading}
+                                                        className={`rounded-full border px-3 py-1.5 text-[11px] font-medium capitalize whitespace-nowrap transition-colors ${clientFilter === f
+                                                            ? "border-zinc-700 bg-[#18181b] text-zinc-100"
+                                                            : "border-white/5 bg-black text-zinc-500 hover:border-white/10 hover:text-zinc-300 disabled:opacity-50"
+                                                            }`}
+                                                    >
+                                                        {f === "all" ? "Todos" : f === "affected" ? "Solo Afectados" : "Solo Degradados"}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            {/* Mobile Client List Container */}
+                                            <div className="flex flex-col gap-2 relative">
+                                                {/* Empty State */}
+                                                {!panelLoading && filteredClients.length === 0 && (
+                                                    <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-zinc-500">
+                                                        <CheckCircle2 size={24} className="text-emerald-500/50" />
+                                                        No hay clientes en este estado.
+                                                    </div>
+                                                )}
+
+                                                {/* Actual Data */}
+                                                {!panelLoading && paginatedClients.map((client) => (
+                                                    <div key={client.clientId} className="rounded-lg border border-white/5 bg-black p-3.5 flex flex-col gap-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="truncate pr-2 text-sm font-medium text-zinc-200">
+                                                                {client.clientName || client.clientId}
+                                                            </div>
+                                                            <PanelStatusBadge status={client.status} />
+                                                        </div>
+                                                        <div className="grid grid-cols-3 gap-2 text-xs">
+                                                            <div>
+                                                                <div className="mb-0.5 text-zinc-500">IP</div>
+                                                                <div className="font-mono text-zinc-300">{client.ip || "-"}</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="mb-0.5 text-zinc-500">Plan</div>
+                                                                <div className="text-zinc-300">{client.plan || "-"}</div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="mb-0.5 text-zinc-500">Ingreso</div>
+                                                                <div className="font-medium text-amber-500">
+                                                                    ${(client.monthlyRevenue ?? DEFAULT_CLIENT_IMPACT_CONFIG.defaultArpu).toLocaleString()}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+
+                                                {/* Mobile Pagination */}
+                                                {!panelLoading && totalClientPages > 1 && (
+                                                    <div className="mt-4 flex shrink-0 items-center justify-center gap-2 pt-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setClientPage((p) => Math.max(1, p - 1));
+                                                            }}
+                                                            disabled={clientPage === 1}
+                                                            className="rounded-full border border-white/5 bg-black px-4 py-2 text-xs font-medium text-zinc-400 disabled:opacity-40"
+                                                        >
+                                                            Atrás
+                                                        </button>
+
+                                                        <span className="text-xs text-zinc-500">
+                                                            {clientPage} de {totalClientPages}
+                                                        </span>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                setClientPage((p) => Math.min(totalClientPages, p + 1));
+                                                            }}
+                                                            disabled={clientPage === totalClientPages}
+                                                            className="rounded-full border border-white/5 bg-black px-4 py-2 text-xs font-medium text-zinc-400 disabled:opacity-40"
+                                                        >
+                                                            Siguiente
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </aside>
                 </>
             )}
 
-            <div className="absolute bottom-4 right-4 z-500 rounded-xl border border-white/6 bg-slate-900/70 px-3 py-1.5 text-xs text-white/50 backdrop-blur-xl">
-                {nodes.length.toLocaleString()} nodos
-                {layers.heatmap && activeGeoJson && (
-                    <span className={`ml-2 ${overlay === "expansion" ? "text-teal-400/70" : "text-violet-400/70"}`}>
-                        · {activeGeoJson.features.length} hex
-                    </span>
-                )}
-            </div>
+
         </div>
     )
 }

@@ -1,375 +1,332 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
+import { Camera, LogOut } from "lucide-react"
+import { ModernTabs } from "@/components/ui/tabs-modern"
+import { ThemePreviewCard, type ThemeType } from "@/components/ui/theme-preview-card"
 
-import { useState } from "react"
-import { cn } from "@/lib/utils"
-import {
-  User,
-  Shield,
-  Bell,
-  Sliders,
-  HelpCircle,
-  LogOut,
-  Save,
-} from "lucide-react"
-
-type SettingsTab = "profile" | "security" | "notifications" | "preferences" | "help"
-
-const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-  { id: "profile", label: "Perfil", icon: <User className="h-4 w-4" /> },
-  { id: "security", label: "Seguridad", icon: <Shield className="h-4 w-4" /> },
-  { id: "notifications", label: "Notificaciones", icon: <Bell className="h-4 w-4" /> },
-  { id: "preferences", label: "Preferencias", icon: <Sliders className="h-4 w-4" /> },
-  { id: "help", label: "Ayuda y soporte", icon: <HelpCircle className="h-4 w-4" /> },
-]
+type SettingsTab = "profile" | "security" | "appearance" | "notifications" | "preferences" | "help"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile")
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground tracking-tight">
-          Configuracion
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Administra tu perfil, seguridad y preferencias del sistema
-        </p>
-      </div>
-
-      {/* Layout */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-        {/* Sidebar tabs */}
-        <div className="lg:col-span-1">
-          <nav className="glass-card space-y-1 p-2">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  activeTab === tab.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                )}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
-            <div className="my-2 border-t border-border" />
-            <button
-              type="button"
-              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
-            >
-              <LogOut className="h-4 w-4" />
-              Cerrar sesion
-            </button>
-          </nav>
-        </div>
-
-        {/* Content */}
-        <div className="lg:col-span-3">
-          {activeTab === "profile" && <ProfileSection />}
-          {activeTab === "security" && <SecuritySection />}
-          {activeTab === "notifications" && <NotificationsSection />}
-          {activeTab === "preferences" && <PreferencesSection />}
-          {activeTab === "help" && <HelpSection />}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ProfileSection() {
-  return (
-    <div className="glass-card p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Perfil</h2>
-        <p className="text-sm text-muted-foreground">
-          Informacion de tu ISP y cuenta de administrador
-        </p>
-      </div>
-
-      {/* Avatar */}
-      <div className="flex items-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-xl font-bold text-primary-foreground">
-          AM
-        </div>
-        <div>
-          <p className="text-foreground font-medium">Administrador</p>
-          <p className="text-sm text-muted-foreground">admin@miisp.com.mx</p>
-          <button
-            type="button"
-            className="mt-1 rounded-lg bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
-          >
-            Cambiar foto
-          </button>
-        </div>
-      </div>
-
-      {/* Form */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label htmlFor="firstName" className="text-sm text-muted-foreground">Nombre</label>
-          <input
-            id="firstName"
-            type="text"
-            defaultValue="Administrador"
-            className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="lastName" className="text-sm text-muted-foreground">Apellido</label>
-          <input
-            id="lastName"
-            type="text"
-            defaultValue="ISP"
-            className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="email" className="text-sm text-muted-foreground">Email</label>
-          <input
-            id="email"
-            type="email"
-            defaultValue="admin@miisp.com.mx"
-            className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="phone" className="text-sm text-muted-foreground">Telefono</label>
-          <input
-            id="phone"
-            type="tel"
-            defaultValue="+52 55 1234 5678"
-            className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <label htmlFor="ispName" className="text-sm text-muted-foreground">Nombre del ISP</label>
-          <input
-            id="ispName"
-            type="text"
-            defaultValue="Mi ISP - Internet para todos"
-            className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-      </div>
-
-      <button
-        type="button"
-        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-      >
-        <Save className="h-4 w-4" />
-        Guardar cambios
-      </button>
-    </div>
-  )
-}
-
-function SecuritySection() {
-  return (
-    <div className="space-y-4">
-      <div className="glass-card p-6 space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Cambiar contrasena</h2>
-          <p className="text-sm text-muted-foreground">
-            Actualiza tu contrasena regularmente para mantener tu cuenta segura
-          </p>
-        </div>
-        <div className="max-w-md space-y-3">
-          <div className="space-y-1.5">
-            <label htmlFor="currentPass" className="text-sm text-muted-foreground">Contrasena actual</label>
-            <input
-              id="currentPass"
-              type="password"
-              className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="newPass" className="text-sm text-muted-foreground">Nueva contrasena</label>
-            <input
-              id="newPass"
-              type="password"
-              className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="confirmPass" className="text-sm text-muted-foreground">Confirmar contrasena</label>
-            <input
-              id="confirmPass"
-              type="password"
-              className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-          <button
-            type="button"
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Actualizar contrasena
-          </button>
-        </div>
-      </div>
-
-      <div className="glass-card p-6 space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Reglas de suspension automatica</h2>
-          <p className="text-sm text-muted-foreground">
-            Define cuando suspender automaticamente a clientes que no paguen
-          </p>
-        </div>
-        <div className="max-w-md space-y-3">
-          <div className="space-y-1.5">
-            <label htmlFor="suspDays" className="text-sm text-muted-foreground">
-              Dias de gracia despues del vencimiento
-            </label>
-            <input
-              id="suspDays"
-              type="number"
-              defaultValue={5}
-              className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-            <p className="text-xs text-muted-foreground">
-              Si el cliente no paga en este numero de dias despues de su fecha de corte, su servicio sera suspendido automaticamente.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function NotificationsSection() {
-  const notifications = [
-    { id: "pay_received", label: "Pago recibido", description: "Cuando un cliente realiza un pago", defaultOn: true },
-    { id: "pay_overdue", label: "Pago vencido", description: "Cuando un pago pasa de su fecha limite", defaultOn: true },
-    { id: "node_offline", label: "Nodo sin conexion", description: "Cuando un equipo de red se desconecta", defaultOn: true },
-    { id: "ticket_new", label: "Nuevo ticket", description: "Cuando un cliente abre un ticket de soporte", defaultOn: true },
-    { id: "client_risk", label: "Cliente en riesgo", description: "Cuando un cliente esta proximo a vencimiento sin pagar", defaultOn: false },
+  const tabs: { id: SettingsTab; label: React.ReactNode }[] = [
+    { id: "profile", label: "Perfil" },
+    { id: "security", label: "Seguridad" },
+    { id: "appearance", label: "Apariencia" },
+    { id: "notifications", label: "Notificaciones" },
+    { id: "preferences", label: "Preferencias" },
+    { id: "help", label: "Ayuda" },
   ]
 
-  return (
-    <div className="glass-card p-6 space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Notificaciones</h2>
-        <p className="text-sm text-muted-foreground">
-          Elige que alertas quieres recibir
-        </p>
-      </div>
-      <div className="space-y-3">
-        {notifications.map((n) => (
-          <div
-            key={n.id}
-            className="flex items-center justify-between rounded-lg bg-secondary/30 px-4 py-3"
-          >
-            <div>
-              <p className="text-sm font-medium text-foreground">{n.label}</p>
-              <p className="text-xs text-muted-foreground">{n.description}</p>
-            </div>
-            <label className="relative inline-flex cursor-pointer items-center" htmlFor={`notif-${n.id}`}>
-              <input
-                id={`notif-${n.id}`}
-                type="checkbox"
-                defaultChecked={n.defaultOn}
-                className="peer sr-only"
-              />
-              <div className="peer h-6 w-11 rounded-full bg-secondary after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-muted-foreground after:transition-all peer-checked:bg-primary peer-checked:after:translate-x-full peer-checked:after:bg-primary-foreground" />
-            </label>
-          </div>
-        ))}
+  // Estados para simular interactividad
+  const [theme, setTheme] = useState<ThemeType>("dark")
+  const [toggles, setToggles] = useState<Record<string, boolean>>({
+    translucentUI: false,
+    pointerCursor: true,
+    pagoRecibido: true,
+    pagoVencido: true,
+    nodoSinConexion: true,
+    nuevoTicket: true,
+    clienteEnRiesgo: false,
+  })
+
+  const handleToggle = (key: string) => {
+    setToggles((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const renderInput = (label: string, description: string, placeholder: string, type = "text", defaultValue = "") => (
+    <div className="mb-8">
+      <h3 className="text-base font-medium text-zinc-100 mb-1">{label}</h3>
+      <p className="text-sm text-zinc-500 mb-3">{description}</p>
+      <input
+        type={type}
+        placeholder={placeholder}
+        defaultValue={defaultValue}
+        className="w-full bg-[#09090b] border border-zinc-800/80 focus:border-blue-500 focus:bg-[#0f0f11] focus:outline-none text-zinc-100 rounded-xl px-4 py-3 transition-colors placeholder:text-zinc-600"
+      />
+    </div>
+  )
+
+  const renderSelect = (label: string, description: string, options: string[], defaultValue: string) => (
+    <div className="mb-8">
+      <h3 className="text-base font-medium text-zinc-100 mb-1">{label}</h3>
+      <p className="text-sm text-zinc-500 mb-3">{description}</p>
+      <div className="relative">
+        <select
+          defaultValue={defaultValue}
+          className="w-full appearance-none bg-[#09090b] border border-zinc-800/80 focus:border-blue-500 focus:bg-[#0f0f11] focus:outline-none text-zinc-100 rounded-xl px-4 py-3 transition-colors"
+        >
+          {options.map((opt, i) => (
+            <option key={i} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-zinc-500">
+          <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+            <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+          </svg>
+        </div>
       </div>
     </div>
   )
-}
 
-function PreferencesSection() {
-  return (
-    <div className="glass-card p-6 space-y-4">
+  const renderToggle = (label: string, description: string, stateKey: string) => (
+    <div className="flex items-center justify-between py-5 border-b border-zinc-800/50 last:border-0">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">Preferencias</h2>
-        <p className="text-sm text-muted-foreground">
-          Personaliza como funciona tu panel de administracion
-        </p>
-      </div>
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <label htmlFor="lang" className="text-sm text-muted-foreground">Idioma</label>
-          <select
-            id="lang"
-            defaultValue="es"
-            className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="es">Espanol</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="tz" className="text-sm text-muted-foreground">Zona horaria</label>
-          <select
-            id="tz"
-            defaultValue="america_mexico"
-            className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="america_mexico">America/Mexico City (UTC-6)</option>
-            <option value="america_cancun">America/Cancun (UTC-5)</option>
-            <option value="america_tijuana">America/Tijuana (UTC-8)</option>
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="currency" className="text-sm text-muted-foreground">Moneda</label>
-          <select
-            id="currency"
-            defaultValue="mxn"
-            className="h-9 w-full rounded-lg border border-input bg-secondary px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="mxn">MXN - Peso Mexicano</option>
-            <option value="usd">USD - Dolar Estadounidense</option>
-          </select>
-        </div>
+        <h3 className="text-base font-medium text-zinc-100">{label}</h3>
+        <p className="text-sm text-zinc-500">{description}</p>
       </div>
       <button
         type="button"
-        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        onClick={() => handleToggle(stateKey)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${toggles[stateKey] ? "bg-blue-600" : "bg-zinc-800"
+          }`}
       >
-        <Save className="h-4 w-4" />
-        Guardar preferencias
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${toggles[stateKey] ? "translate-x-6" : "translate-x-1"
+            }`}
+        />
       </button>
     </div>
   )
-}
 
-function HelpSection() {
   return (
-    <div className="glass-card p-6 space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Ayuda y soporte</h2>
-        <p className="text-sm text-muted-foreground">
-          Recursos para aprender a usar el panel de administracion
-        </p>
+    <div className="mx-auto max-w-4xl py-6 pb-16 font-sans">
+      {/* Header */}
+      <div className="mb-8 flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-zinc-100 mb-2 tracking-tight">Configuración</h1>
+          <p className="text-zinc-500">Administra tu perfil, seguridad, preferencias y apariencia del sistema.</p>
+        </div>
       </div>
-      <div className="space-y-3">
-        <div className="rounded-lg bg-secondary/30 p-4">
-          <h3 className="text-sm font-medium text-foreground">Como gestionar clientes</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Desde la seccion &quot;Clientes&quot; puedes ver todos tus clientes, filtrarlos por estado, ver su informacion y realizar acciones como suspender o reactivar su servicio.
-          </p>
-        </div>
-        <div className="rounded-lg bg-secondary/30 p-4">
-          <h3 className="text-sm font-medium text-foreground">Como funciona la suspension automatica</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Cuando un cliente no paga antes de su fecha de corte, el sistema lo marca como &quot;en riesgo&quot;. Si pasan los dias de gracia configurados y no paga, su servicio se suspende automaticamente.
-          </p>
-        </div>
-        <div className="rounded-lg bg-secondary/30 p-4">
-          <h3 className="text-sm font-medium text-foreground">Que significan los estados de red</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            &quot;En linea&quot; significa que el equipo funciona bien. &quot;Degradado&quot; significa que hay problemas de rendimiento. &quot;Sin conexion&quot; significa que el equipo no responde y los clientes conectados no tienen servicio.
-          </p>
-        </div>
+
+      {/* Navigation using Custom Tab Component */}
+      <div className="mb-10 w-full overflow-x-auto pb-2 scrollbar-hide">
+        <ModernTabs
+          tabs={tabs}
+          value={activeTab}
+          onChange={(val) => setActiveTab(val as SettingsTab)}
+        />
+      </div>
+
+      {/* Content Area */}
+      <div className="max-w-3xl">
+        {/* PERFIL */}
+        {activeTab === "profile" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="mb-10">
+              <h3 className="text-base font-medium text-zinc-100 mb-1">Avatar</h3>
+              <p className="text-sm text-zinc-500 mb-4">Esta imagen se mostrará públicamente en tu perfil.</p>
+              <div className="bg-[#09090b] border border-zinc-800/80 rounded-2xl p-4 flex items-center gap-4 w-fit">
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-white text-xl font-bold">
+                    AM
+                  </div>
+                  <button className="absolute bottom-0 right-0 bg-zinc-800 p-1.5 rounded-full border border-zinc-700 hover:bg-zinc-700 transition-colors">
+                    <Camera size={14} className="text-white" />
+                  </button>
+                </div>
+                <div className="pr-4">
+                  <p className="text-zinc-100 font-medium">Administrador</p>
+                  <p className="text-zinc-500 text-sm">admin@miisp.com.mx</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+              {renderInput("Nombre", "Tu nombre de pila.", "Ej. Alejandro", "text", "Administrador")}
+              {renderInput("Apellido", "Tus apellidos.", "Ej. Morales", "text", "ISP")}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+              {renderInput("Email", "El correo asociado a tu cuenta.", "Ej. admin@ejemplo.com", "email", "admin@miisp.com.mx")}
+              {renderInput("Teléfono", "Número de contacto.", "Ej. +52 55 1234 5678", "tel", "+52 55 1234 5678")}
+            </div>
+
+            {renderInput(
+              "Nombre del ISP",
+              "El nombre comercial de tu empresa proveedora de internet.",
+              "Ej. Mi ISP - Internet para todos",
+              "text",
+              "Mi ISP - Internet para todos"
+            )}
+
+            <div className="mt-8">
+              <button className="bg-zinc-100 hover:bg-zinc-300 text-black font-medium py-2.5 px-6 rounded-xl transition-colors">
+                Actualizar Perfil
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* SEGURIDAD */}
+        {activeTab === "security" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="mb-12">
+              <h2 className="text-xl font-semibold text-zinc-100 mb-6">Cambiar contraseña</h2>
+              {renderInput("Contraseña actual", "Ingresa tu contraseña actual para verificar tu identidad.", "••••••••", "password")}
+              {renderInput("Nueva contraseña", "Debe tener al menos 8 caracteres.", "••••••••", "password")}
+              {renderInput("Confirmar contraseña", "Vuelve a escribir la nueva contraseña.", "••••••••", "password")}
+
+              <button className="bg-zinc-100 hover:bg-zinc-300 text-black font-medium py-2.5 px-6 rounded-xl transition-colors mt-2">
+                Actualizar contraseña
+              </button>
+            </div>
+
+            <div className="pt-8 border-t border-zinc-800/50">
+              <h2 className="text-xl font-semibold text-zinc-100 mb-6">Reglas de suspensión automática</h2>
+              {renderInput(
+                "Días de gracia después del vencimiento",
+                "Si el cliente no paga en este número de días después de su fecha de corte, su servicio será suspendido automáticamente.",
+                "Ej. 5",
+                "number",
+                "5"
+              )}
+              <button className="bg-[#09090b] border border-zinc-800/80 hover:bg-zinc-900 text-zinc-100 font-medium py-2.5 px-6 rounded-xl transition-colors mt-2">
+                Guardar reglas
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* APARIENCIA */}
+        {activeTab === "appearance" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="mb-10">
+              <h3 className="text-base font-medium text-zinc-100 mb-1">Tema</h3>
+              <p className="text-sm text-zinc-500 mb-5">Cambia la apariencia del panel de administración.</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <ThemePreviewCard theme="light" isActive={theme === "light"} onClick={() => setTheme("light")} />
+                <ThemePreviewCard theme="dark" isActive={theme === "dark"} onClick={() => setTheme("dark")} />
+                <ThemePreviewCard theme="system" isActive={theme === "system"} onClick={() => setTheme("system")} />
+              </div>
+            </div>
+
+            {renderSelect(
+              "Tamaño de fuente",
+              "Ajusta el tamaño de los textos en la web.",
+              ["Pequeño", "Normal", "Grande", "Extra Grande"],
+              "Normal"
+            )}
+
+            <div className="mt-8 space-y-2 border-t border-zinc-800/50 pt-4">
+              {renderToggle(
+                "Interfaz Translúcida",
+                "Usa transparencia en elementos de la UI como barras laterales y diálogos modales.",
+                "translucentUI"
+              )}
+              {renderToggle(
+                "Usar cursor de puntero",
+                "Cambia el cursor a una mano al pasar sobre elementos clickeables.",
+                "pointerCursor"
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* NOTIFICACIONES */}
+        {activeTab === "notifications" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 className="text-xl font-semibold text-zinc-100 mb-2">Notificaciones</h2>
+            <p className="text-sm text-zinc-500 mb-6">Elige qué alertas quieres recibir en tu correo o panel.</p>
+
+            <div className="bg-[#09090b] border border-zinc-800/60 rounded-2xl p-2 px-6">
+              {renderToggle("Pago recibido", "Cuando un cliente realiza un pago exitoso.", "pagoRecibido")}
+              {renderToggle("Pago vencido", "Cuando un pago pasa de su fecha límite.", "pagoVencido")}
+              {renderToggle("Nodo sin conexión", "Cuando un equipo de red principal se desconecta.", "nodoSinConexion")}
+              {renderToggle("Nuevo ticket", "Cuando un cliente abre un ticket de soporte técnico.", "nuevoTicket")}
+              {renderToggle("Cliente en riesgo", "Cuando un cliente está próximo a vencimiento sin pagar.", "clienteEnRiesgo")}
+            </div>
+          </div>
+        )}
+
+        {/* PREFERENCIAS */}
+        {activeTab === "preferences" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 className="text-xl font-semibold text-zinc-100 mb-6">Preferencias Generales</h2>
+
+            {renderSelect(
+              "Idioma",
+              "El idioma en el que verás el panel de administración.",
+              ["Español", "English", "Português"],
+              "Español"
+            )}
+            {renderSelect(
+              "Zona horaria",
+              "Define cómo se muestran las fechas y horas en los reportes.",
+              ["America/Mexico_City (UTC-6)", "America/Bogota (UTC-5)", "America/Argentina/Buenos_Aires (UTC-3)"],
+              "America/Mexico_City (UTC-6)"
+            )}
+            {renderSelect(
+              "Moneda",
+              "La moneda utilizada para facturación y cobros.",
+              ["MXN - Peso Mexicano", "USD - Dólar Estadounidense", "EUR - Euro"],
+              "MXN - Peso Mexicano"
+            )}
+
+            <div className="mt-8">
+              <button className="bg-zinc-100 hover:bg-zinc-300 text-black font-medium py-2.5 px-6 rounded-xl transition-colors">
+                Guardar preferencias
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* AYUDA */}
+        {activeTab === "help" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 className="text-xl font-semibold text-zinc-100 mb-6">Centro de Ayuda y Soporte</h2>
+
+            <div className="space-y-4">
+              <a
+                href="#"
+                className="block bg-[#09090b] border border-zinc-800/60 hover:border-zinc-700 hover:bg-[#0c0c0e] p-6 rounded-2xl transition-all"
+              >
+                <h3 className="text-zinc-100 font-medium mb-2">Cómo gestionar clientes</h3>
+                <p className="text-sm text-zinc-500 leading-relaxed">
+                  Desde la sección "Clientes" puedes ver todos tus clientes, filtrarlos por estado, ver su información y
+                  realizar acciones como suspender o reactivar su servicio.
+                </p>
+              </a>
+
+              <a
+                href="#"
+                className="block bg-[#09090b] border border-zinc-800/60 hover:border-zinc-700 hover:bg-[#0c0c0e] p-6 rounded-2xl transition-all"
+              >
+                <h3 className="text-zinc-100 font-medium mb-2">Cómo funciona la suspensión automática</h3>
+                <p className="text-sm text-zinc-500 leading-relaxed">
+                  Cuando un cliente no paga antes de su fecha de corte, el sistema lo marca como "en riesgo". Si pasan los
+                  días de gracia configurados en la pestaña Seguridad y no paga, su servicio se suspende automáticamente.
+                </p>
+              </a>
+
+              <a
+                href="#"
+                className="block bg-[#09090b] border border-zinc-800/60 hover:border-zinc-700 hover:bg-[#0c0c0e] p-6 rounded-2xl transition-all"
+              >
+                <h3 className="text-zinc-100 font-medium mb-2">Qué significan los estados de red</h3>
+                <p className="text-sm text-zinc-500 leading-relaxed">
+                  "En línea" significa que el equipo funciona bien. "Degradado" significa que hay problemas de
+                  rendimiento. "Sin conexión" significa que el equipo no responde y los clientes conectados no tienen
+                  servicio.
+                </p>
+              </a>
+            </div>
+
+            <div className="mt-8 p-6 bg-blue-950/20 border border-blue-900/40 rounded-2xl">
+              <h3 className="text-blue-400 font-medium mb-2">¿Necesitas asistencia técnica?</h3>
+              <p className="text-sm text-zinc-400 mb-4">
+                Nuestro equipo de soporte está disponible 24/7 para ayudarte con problemas graves.
+              </p>
+              <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm">
+                Abrir ticket de soporte
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

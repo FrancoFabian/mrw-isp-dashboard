@@ -26,9 +26,9 @@ export const paymentStatusLabels: Record<PaymentStatus, string> = {
 }
 
 export const paymentStatusColors: Record<PaymentStatus, string> = {
-  paid: "bg-emerald-500/20 text-emerald-400",
-  pending: "bg-amber-500/20 text-amber-400",
-  overdue: "bg-red-500/20 text-red-400",
+  paid: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  pending: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  overdue: "bg-red-500/10 text-red-400 border-red-500/20",
 }
 
 export const paymentSourceLabels: Record<PaymentSource, string> = {
@@ -38,8 +38,8 @@ export const paymentSourceLabels: Record<PaymentSource, string> = {
 }
 
 export const paymentSourceColors: Record<PaymentSource, string> = {
-  client: "bg-blue-500/20 text-blue-400",
-  collector: "bg-purple-500/20 text-purple-400",
-  admin: "bg-cyan-500/20 text-cyan-400",
+  client: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  collector: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  admin: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
 }
 

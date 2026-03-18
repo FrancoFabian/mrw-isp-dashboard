@@ -46,9 +46,9 @@ export const clientStatusLabels: Record<ClientStatus, string> = {
 }
 
 export const clientStatusColors: Record<ClientStatus, string> = {
-  active: "bg-emerald-500/20 text-emerald-400",
-  suspended: "bg-red-500/20 text-red-400",
-  at_risk: "bg-amber-500/20 text-amber-400",
+  active: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  suspended: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+  at_risk: "bg-amber-500/10 text-amber-400 border-amber-500/20",
 }
 
 export const lifecycleStatusLabels: Record<ClientLifecycleStatus, string> = {
@@ -61,10 +61,10 @@ export const lifecycleStatusLabels: Record<ClientLifecycleStatus, string> = {
 }
 
 export const lifecycleStatusColors: Record<ClientLifecycleStatus, string> = {
-  prospect: "bg-amber-500/20 text-amber-400",
-  installation_scheduled: "bg-primary/20 text-primary",
-  installation_confirmed: "bg-cyan-500/20 text-cyan-400",
-  installed: "bg-emerald-500/20 text-emerald-400",
-  active: "bg-emerald-500/20 text-emerald-400",
-  suspended: "bg-red-500/20 text-red-400",
+  prospect: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  installation_scheduled: "bg-primary/10 text-primary border-primary/20",
+  installation_confirmed: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+  installed: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  active: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  suspended: "bg-rose-500/10 text-rose-400 border-rose-500/20",
 }

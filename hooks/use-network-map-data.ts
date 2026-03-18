@@ -170,35 +170,35 @@ function generateMockNodes(_center: [number, number], bbox: string): MapNodeProj
     const bounds = parseBbox(bbox)
     const nodes: MapNodeProjection[] = []
 
-    ;(["olt", "nap", "onu"] as MapNodeType[]).forEach((type) => {
-        const total = NODE_PLAN[type]
+        ; (["olt", "nap", "onu"] as MapNodeType[]).forEach((type) => {
+            const total = NODE_PLAN[type]
 
-        for (let index = 0; index < total; index++) {
-            const globalSeed = index + (type === "olt" ? 1000 : type === "nap" ? 3000 : 6000)
-            const locality = LOCALITIES[Math.floor(seeded(globalSeed) * LOCALITIES.length) % LOCALITIES.length]
-            const jitter = jitterByType(type)
+            for (let index = 0; index < total; index++) {
+                const globalSeed = index + (type === "olt" ? 1000 : type === "nap" ? 3000 : 6000)
+                const locality = LOCALITIES[Math.floor(seeded(globalSeed) * LOCALITIES.length) % LOCALITIES.length]
+                const jitter = jitterByType(type)
 
-            const node: MapNodeProjection = {
-                id: `${type}-${String(index + 1).padStart(3, "0")}`,
-                lat: locality.lat + (seeded(globalSeed + 21) - 0.5) * jitter.lat,
-                lng: locality.lng + (seeded(globalSeed + 42) - 0.5) * jitter.lng,
-                status: statusByType(type, globalSeed + 63),
-                lastSeenAt: new Date(Date.now() - Math.round(seeded(globalSeed + 84) * 4_500_000)).toISOString(),
-                health: healthByStatus(statusByType(type, globalSeed + 63), globalSeed + 105),
-                label: buildLabel(type, locality, index + 1),
-                type,
-                badge: statusByType(type, globalSeed + 63) === "OFFLINE"
-                    ? "LOS"
-                    : statusByType(type, globalSeed + 63) === "DEGRADED"
-                        ? "Atenuacion alta"
-                        : undefined,
-                customerId: type === "onu" ? `cust-${((index + 1) % 120) + 1}` : undefined,
-                deviceId: `dev-${type}-${String(index + 1).padStart(5, "0")}`,
+                const node: MapNodeProjection = {
+                    id: `${type}-${String(index + 1).padStart(3, "0")}`,
+                    lat: locality.lat + (seeded(globalSeed + 21) - 0.5) * jitter.lat,
+                    lng: locality.lng + (seeded(globalSeed + 42) - 0.5) * jitter.lng,
+                    status: statusByType(type, globalSeed + 63),
+                    lastSeenAt: new Date(Date.now() - Math.round(seeded(globalSeed + 84) * 4_500_000)).toISOString(),
+                    health: healthByStatus(statusByType(type, globalSeed + 63), globalSeed + 105),
+                    label: buildLabel(type, locality, index + 1),
+                    type,
+                    badge: statusByType(type, globalSeed + 63) === "OFFLINE"
+                        ? "LOS"
+                        : statusByType(type, globalSeed + 63) === "DEGRADED"
+                            ? "Atenuacion alta"
+                            : undefined,
+                    customerId: type === "onu" ? `cust-${((index + 1) % 120) + 1}` : undefined,
+                    deviceId: `dev-${type}-${String(index + 1).padStart(5, "0")}`,
+                }
+
+                if (!bounds || inBbox(node, bounds)) nodes.push(node)
             }
-
-            if (!bounds || inBbox(node, bounds)) nodes.push(node)
-        }
-    })
+        })
 
     return nodes
 }
@@ -254,5 +254,6 @@ export function useNetworkMapData({ viewport }: UseNetworkMapDataParams) {
                 : Promise.resolve([]),
         enabled: bbox !== null,
         placeholderData: keepPreviousData,
+        staleTime: 60 * 1000, // 1 minute
     })
 }

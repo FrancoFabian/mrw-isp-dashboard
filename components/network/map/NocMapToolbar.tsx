@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useEffect, useCallback } from "react"
+import React, { useRef, useState, useEffect, useCallback } from "react"
 import { useAtom } from "jotai"
 import {
     filtersAtom,
@@ -29,6 +29,8 @@ import {
     Users,
     Ticket,
     DollarSign,
+    ChevronLeft,
+    ChevronRight,
 } from "lucide-react"
 
 /* ══════════════════════════════════════════════════════════
@@ -72,15 +74,16 @@ function FilterButton({
         <button
             type="button"
             onClick={onClick}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-bold transition-all duration-300 ${active ? SCHEME_CLASSES[colorScheme] : INACTIVE_CLASS}`}
+            title={label}
+            className={`flex items-center justify-center gap-1.5 rounded-full p-2 h-8 w-8 md:p-0 md:h-auto md:w-auto md:px-2.5 md:py-1.5 text-[11px] font-bold transition-all duration-300 ${active ? SCHEME_CLASSES[colorScheme] : INACTIVE_CLASS}`}
         >
             {Icon && (
                 <Icon
                     size={14}
-                    className={active ? "drop-shadow-[0_0_8px_currentColor]" : "opacity-60"}
+                    className={active ? "drop-shadow-[0_0_8px_currentColor] shrink-0" : "opacity-60 shrink-0"}
                 />
             )}
-            {label}
+            <span className="hidden md:inline">{label}</span>
         </button>
     )
 }
@@ -90,8 +93,19 @@ function FilterButton({
    ══════════════════════════════════════════════════════════ */
 function ToolbarSeparator() {
     return (
-        <div className="mx-1 h-5 w-px shrink-0 bg-gradient-to-b from-transparent via-zinc-700/80 to-transparent" />
+        <div className="mx-1 h-5 w-px shrink-0 bg-gradient-to-b from-transparent via-zinc-700/80 to-transparent hidden md:block" />
     )
+}
+
+/* ══════════════════════════════════════════════════════════
+   Dot color map for collapsed mobile indicator
+   ══════════════════════════════════════════════════════════ */
+const DOT_COLORS: Record<string, { active: string; inactive: string }> = {
+    emerald: { active: "bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.6)]", inactive: "bg-white/80" },
+    rose: { active: "bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.6)]", inactive: "bg-white/80" },
+    amber: { active: "bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.6)]", inactive: "bg-white/80" },
+    zinc: { active: "bg-zinc-300 shadow-[0_0_6px_rgba(161,161,170,0.5)]", inactive: "bg-white/80" },
+    cyan: { active: "bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.6)]", inactive: "bg-white/80" },
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -228,12 +242,14 @@ interface NocMapToolbarProps {
     inlineMessage?: string | null
 }
 
-export function NocMapToolbar({ onFocusMyNodes, inlineMessage }: NocMapToolbarProps) {
+function NocMapToolbarInner({ onFocusMyNodes, inlineMessage }: NocMapToolbarProps) {
     const [filters, setFilters] = useAtom(filtersAtom)
     const [layers, setLayers] = useAtom(layersAtom)
     const [heatmapMode, setHeatmapMode] = useAtom(heatmapModeAtom)
     const [overlay, setOverlay] = useAtom(mapOverlayAtom)
     const [isSearchFocused, setIsSearchFocused] = useState(false)
+    const [isMobileExpanded, setIsMobileExpanded] = useState(false)
+    const [isMobileTypeExpanded, setIsMobileTypeExpanded] = useState(false)
 
     /* ── Mutators ── */
     function toggleStatus(status: MapNodeStatus) {
@@ -279,9 +295,60 @@ export function NocMapToolbar({ onFocusMyNodes, inlineMessage }: NocMapToolbarPr
             {/* ═══════════════════════════════════════════
                 LEVEL 1: Main toolbar (always visible)
                ═══════════════════════════════════════════ */}
-            <div className="flex items-center rounded-full border border-zinc-800/80 bg-[#0a0a0a]/85 p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-                {/* Status toggles */}
-                <div className="flex items-center gap-0.5">
+            <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-zinc-800/80 bg-[#0a0a0a]/85 p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-xl lg:rounded-full">
+
+                {/* ── MOBILE: Collapsed dot grid OR expanded icons ── */}
+                <div className="flex items-center gap-1 md:hidden">
+                    {!isMobileExpanded ? (
+                        /* 2x2 dot grid when collapsed */
+                        <button
+                            type="button"
+                            onClick={() => setIsMobileExpanded(true)}
+                            className="flex items-center justify-center rounded-full p-2 transition-all duration-200 hover:bg-zinc-800/50"
+                            title="Expandir filtros"
+                        >
+                            <div className="grid grid-cols-2 gap-1">
+                                {STATUS_OPTIONS.map((opt) => {
+                                    const isActive = filters.statuses.includes(opt.value)
+                                    const colors = DOT_COLORS[opt.colorScheme]
+                                    return (
+                                        <div
+                                            key={opt.value}
+                                            className={`h-2 w-2 rounded-full transition-all duration-300 ${isActive ? colors.active : colors.inactive}`}
+                                        />
+                                    )
+                                })}
+                            </div>
+                        </button>
+                    ) : (
+                        /* Expanded: show filters + collapse chevron */
+                        <>
+                            <div className="flex items-center gap-0.5">
+                                {STATUS_OPTIONS.map((opt) => (
+                                    <FilterButton
+                                        key={opt.value}
+                                        active={filters.statuses.includes(opt.value)}
+                                        onClick={() => toggleStatus(opt.value)}
+                                        colorScheme={opt.colorScheme}
+                                        label={opt.label}
+                                        icon={opt.icon}
+                                    />
+                                ))}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsMobileExpanded(false)}
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-800/50 hover:text-zinc-200"
+                                title="Colapsar filtros"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                        </>
+                    )}
+                </div>
+
+                {/* ── DESKTOP: Status toggles (always visible) ── */}
+                <div className="hidden items-center gap-0.5 md:flex">
                     {STATUS_OPTIONS.map((opt) => (
                         <FilterButton
                             key={opt.value}
@@ -296,8 +363,58 @@ export function NocMapToolbar({ onFocusMyNodes, inlineMessage }: NocMapToolbarPr
 
                 <ToolbarSeparator />
 
-                {/* Type toggles */}
-                <div className="flex items-center gap-0.5">
+                {/* ── MOBILE: Type dot grid OR expanded type icons ── */}
+                <div className="flex items-center gap-1 md:hidden">
+                    {!isMobileTypeExpanded ? (
+                        /* 3-dot row when collapsed */
+                        <button
+                            type="button"
+                            onClick={() => setIsMobileTypeExpanded(true)}
+                            className="flex items-center justify-center rounded-full p-2 transition-all duration-200 hover:bg-zinc-800/50"
+                            title="Expandir tipos"
+                        >
+                            <div className="flex gap-1">
+                                {TYPE_OPTIONS.map((opt) => {
+                                    const isActive = filters.types.includes(opt.value)
+                                    const colors = DOT_COLORS["cyan"]
+                                    return (
+                                        <div
+                                            key={opt.value}
+                                            className={`h-2 w-2 rounded-full transition-all duration-300 ${isActive ? colors.active : colors.inactive}`}
+                                        />
+                                    )
+                                })}
+                            </div>
+                        </button>
+                    ) : (
+                        /* Expanded: show type filters + collapse chevron */
+                        <>
+                            <div className="flex items-center gap-0.5">
+                                {TYPE_OPTIONS.map((opt) => (
+                                    <FilterButton
+                                        key={opt.value}
+                                        active={filters.types.includes(opt.value)}
+                                        onClick={() => toggleType(opt.value)}
+                                        colorScheme="cyan"
+                                        label={opt.label}
+                                        icon={opt.icon}
+                                    />
+                                ))}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsMobileTypeExpanded(false)}
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-800/50 hover:text-zinc-200"
+                                title="Colapsar tipos"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                        </>
+                    )}
+                </div>
+
+                {/* ── DESKTOP: Type toggles — hidden below 1280px ── */}
+                <div className="hidden items-center gap-0.5 xl:flex">
                     {TYPE_OPTIONS.map((opt) => (
                         <FilterButton
                             key={opt.value}
@@ -312,19 +429,21 @@ export function NocMapToolbar({ onFocusMyNodes, inlineMessage }: NocMapToolbarPr
 
                 <ToolbarSeparator />
 
-                {/* Heatmap toggle */}
-                <FilterButton
-                    active={layers.heatmap}
-                    onClick={toggleHeatmap}
-                    colorScheme="purple"
-                    label="Heatmap"
-                    icon={Layers}
-                />
+                {/* Heatmap toggle — hidden below 1024px */}
+                <div className="hidden lg:block">
+                    <FilterButton
+                        active={layers.heatmap}
+                        onClick={toggleHeatmap}
+                        colorScheme="purple"
+                        label="Heatmap"
+                        icon={Layers}
+                    />
+                </div>
 
                 <ToolbarSeparator />
 
-                {/* Expandable search */}
-                <div className="group relative ml-1 flex items-center">
+                {/* Expandable search — hidden below 1024px */}
+                <div className="group relative ml-1 hidden items-center lg:flex">
                     <Search
                         size={14}
                         className={`pointer-events-none absolute left-3 transition-colors duration-300 ${isSearchFocused || filters.search
@@ -346,8 +465,8 @@ export function NocMapToolbar({ onFocusMyNodes, inlineMessage }: NocMapToolbarPr
                     />
                 </div>
 
-                {/* Focus my nodes */}
-                <div className="ml-2 mr-0.5">
+                {/* Focus my nodes — hidden below 1280px */}
+                <div className="ml-2 mr-0.5 hidden xl:block">
                     <button
                         type="button"
                         onClick={onFocusMyNodes}
@@ -411,3 +530,5 @@ export function NocMapToolbar({ onFocusMyNodes, inlineMessage }: NocMapToolbarPr
         </div>
     )
 }
+
+export const NocMapToolbar = React.memo(NocMapToolbarInner)

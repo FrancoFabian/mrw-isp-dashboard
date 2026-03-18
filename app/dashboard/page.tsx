@@ -1,4 +1,5 @@
-import { MetricCard } from "@/components/dashboard/metric-card"
+import { KpiStatCard } from "@/components/dashboard/kpi-stat-card"
+import { NetworkStatusCard } from "@/components/dashboard/network-status-card"
 import { RevenueChart } from "@/components/dashboard/revenue-chart"
 import { ClientsChart } from "@/components/dashboard/clients-chart"
 import { RecentActivity } from "@/components/dashboard/recent-activity"
@@ -7,7 +8,21 @@ import { mockClients } from "@/mocks/clients"
 import { mockPayments } from "@/mocks/payments"
 import { mockTickets } from "@/mocks/tickets"
 import { mockNodes } from "@/mocks/network"
-import { Users, DollarSign, LifeBuoy, Wifi } from "lucide-react"
+import { Users, DollarSign, LifeBuoy } from "lucide-react"
+
+const dataToPoints = (dataArray: number[]) => {
+  const min = Math.min(...dataArray);
+  const max = Math.max(...dataArray);
+  const range = max - min || 1;
+  return dataArray.map((d, i) => ({
+    x: (i / (dataArray.length - 1)) * 100,
+    y: ((d - min) / range) * 100,
+  }));
+};
+
+const clientesData = dataToPoints([10, 15, 12, 20, 25, 22, 35, 30, 45, 58]);
+const ingresosData = dataToPoints([30, 32, 28, 35, 34, 40, 38, 45, 42, 48]);
+const ticketsData = dataToPoints([80, 85, 70, 60, 65, 50, 40, 45, 30, 20]);
 
 export default function DashboardPage() {
   const activeClients = mockClients.filter((c) => c.status === "active").length
@@ -35,44 +50,41 @@ export default function DashboardPage() {
 
       {/* Metrics */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
-        <MetricCard
+        <KpiStatCard
           title="Clientes activos"
-          value={`${activeClients}/${mockClients.length}`}
-          change={12.5}
-          changeLabel="vs mes anterior"
-          icon={<Users className="h-5 w-5" />}
-          iconColor="bg-primary/10 text-primary"
+          value={<>{activeClients} <span className="text-sm font-normal text-zinc-500">/{mockClients.length}</span></>}
+          deltaPct={12.5}
+          subtitle="vs mes anterior"
+          points={clientesData}
+          tone="success"
+          icon={<Users size={16} />}
         />
-        <MetricCard
+        <KpiStatCard
           title="Ingresos del mes"
           value={`$${totalRevenue.toLocaleString()}`}
-          change={8.3}
-          changeLabel="vs mes anterior"
-          icon={<DollarSign className="h-5 w-5" />}
-          iconColor="bg-emerald-500/10 text-emerald-400"
+          deltaPct={8.3}
+          subtitle="vs mes anterior"
+          points={ingresosData}
+          tone="success"
+          icon={<DollarSign size={16} />}
         />
-        <MetricCard
+        <KpiStatCard
           title="Tickets abiertos"
           value={openTickets.toString()}
-          change={-15}
-          changeLabel="vs semana pasada"
-          icon={<LifeBuoy className="h-5 w-5" />}
-          iconColor="bg-amber-500/10 text-amber-400"
+          deltaPct={-15}
+          subtitle="vs semana pasada"
+          points={ticketsData}
+          tone="warning"
+          icon={<LifeBuoy size={16} />}
         />
-        <MetricCard
-          title="Estado de red"
-          value={networkAlerts > 0 ? `${networkAlerts} Alertas` : "Todo bien"}
-          icon={<Wifi className="h-5 w-5" />}
-          iconColor={
-            networkAlerts > 0
-              ? "bg-red-500/10 text-red-400"
-              : "bg-emerald-500/10 text-emerald-400"
-          }
+        <NetworkStatusCard
+          status={networkAlerts > 1 ? 'critical' : networkAlerts === 1 ? 'warning' : 'success'}
+          alertsCount={networkAlerts}
         />
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 items-start xl:items-center">
         <div className="xl:col-span-2">
           <RevenueChart />
         </div>

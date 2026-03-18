@@ -12,6 +12,7 @@
     "test:impact": "vitest run lib/impact/__tests__ components/network/map/__tests__"
   },
   "dependencies": {
+    "@formkit/tempo": "^1.0.0",
     "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "1.2.2",

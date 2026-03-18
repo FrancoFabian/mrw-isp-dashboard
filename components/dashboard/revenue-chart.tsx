@@ -13,11 +13,11 @@ import { monthlyRevenue } from "@/mocks/payments"
 
 export function RevenueChart() {
   return (
-    <div className="glass-card p-5">
+    <div className="bg-linear-to-b from-[#1c1c1e] to-[#0a0a0a] border border-white/5 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex flex-col w-full font-sans text-gray-200">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Ingresos vs Gastos</h3>
-          <p className="text-xs text-muted-foreground">Ultimos 12 meses</p>
+          <h2 className="text-xl font-bold text-white tracking-tight mb-1">Ingresos vs Gastos</h2>
+          <p className="text-gray-400 text-xs">Ultimos 12 meses</p>
         </div>
       </div>
       <ChartContainer

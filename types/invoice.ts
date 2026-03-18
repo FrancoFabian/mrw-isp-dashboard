@@ -38,11 +38,11 @@ export const invoiceStatusLabels: Record<InvoiceStatus, string> = {
 }
 
 export const invoiceStatusColors: Record<InvoiceStatus, string> = {
-    draft: "bg-slate-500/20 text-slate-400",
-    issued: "bg-blue-500/20 text-blue-400",
-    paid: "bg-emerald-500/20 text-emerald-400",
-    overdue: "bg-red-500/20 text-red-400",
-    cancelled: "bg-muted text-muted-foreground",
+    draft: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+    issued: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    paid: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    overdue: "bg-red-500/10 text-red-400 border-red-500/20",
+    cancelled: "bg-muted text-muted-foreground border-border",
 }
 
 export const invoiceItemTypeLabels: Record<InvoiceItemType, string> = {

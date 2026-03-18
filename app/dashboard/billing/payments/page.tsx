@@ -1,23 +1,27 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { mockPayments } from "@/mocks/payments"
 import { mockInvoices } from "@/mocks/invoices"
-import type { PaymentSource } from "@/types/payment"
-import { PaymentSourceBadge } from "@/components/billing/PaymentSourceBadge"
+import type { PaymentSource, Payment } from "@/types/payment"
+import { paymentSourceLabels, paymentSourceColors } from "@/types/payment"
+import { DataTable, type ColumnDef } from "@/components/ui/data-table"
+import { TableSearch } from "@/components/ui/table-search"
+import { TablePagination } from "@/components/ui/table-pagination"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { ModernSelectTailwind } from "@/components/ui/selection-modern"
+import { ModernDatePicker } from "@/components/ui/date-picker-modern"
+import { PaymentKpisRow } from "@/components/billing/payment-kpis"
 import {
-    Search,
-    Filter,
     CreditCard,
     DollarSign,
     CheckCircle,
-    Clock,
     Link as LinkIcon,
     Banknote,
     Building,
-    User
+    User,
+    ArrowRightLeft,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
 
 const sourceFilters: { label: string; value: PaymentSource | "all" }[] = [
     { label: "Todos", value: "all" },
@@ -26,18 +30,88 @@ const sourceFilters: { label: string; value: PaymentSource | "all" }[] = [
     { label: "Admin", value: "admin" },
 ]
 
-const reconciledFilters = [
+const reconciledFilters: { label: string; value: "all" | "true" | "false" }[] = [
     { label: "Todos", value: "all" },
     { label: "Conciliados", value: "true" },
     { label: "Pendientes", value: "false" },
 ]
 
+const defaultColumns = ["reference", "client", "amount", "method", "source", "date", "invoice", "action"]
+const columnOptions = [
+    { keyId: "reference", label: "Referencia" },
+    { keyId: "client", label: "Cliente" },
+    { keyId: "amount", label: "Monto" },
+    { keyId: "method", label: "Método" },
+    { keyId: "source", label: "Origen" },
+    { keyId: "date", label: "Fecha" },
+    { keyId: "invoice", label: "Factura" },
+    { keyId: "action", label: "Acción" },
+]
+
+const formatCurrency = (amount: number) =>
+    `$${amount.toLocaleString("en-US")}`
+
+const formatDate = (dateStr: string) => {
+    if (!dateStr) return "-"
+    const date = new Date(dateStr)
+    return date.toLocaleDateString("es-MX", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+    })
+}
+
+const getMethodIcon = (method: string) => {
+    const m = method.toLowerCase()
+    if (m.includes("tarjeta") || m.includes("card")) return CreditCard
+    if (m.includes("transfer")) return Building
+    if (m.includes("efectivo") || m.includes("cash")) return Banknote
+    if (m.includes("oxxo")) return Building
+    return DollarSign
+}
+
+const getInvoiceForPayment = (invoiceId?: string) => {
+    if (!invoiceId) return null
+    return mockInvoices.find((inv) => inv.id === invoiceId)
+}
+
+const isSameDate = (dateStr: string, targetDate: Date) => {
+    const date = new Date(`${dateStr}T00:00:00`)
+    if (Number.isNaN(date.getTime())) return false
+
+    return (
+        date.getDate() === targetDate.getDate() &&
+        date.getMonth() === targetDate.getMonth() &&
+        date.getFullYear() === targetDate.getFullYear()
+    )
+}
+
 export default function PaymentsPage() {
     const [sourceFilter, setSourceFilter] = useState<PaymentSource | "all">("all")
-    const [reconciledFilter, setReconciledFilter] = useState("all")
+    const [reconciledFilter, setReconciledFilter] = useState<"all" | "true" | "false">("all")
     const [searchQuery, setSearchQuery] = useState("")
+    const [debouncedQuery, setDebouncedQuery] = useState("")
+    const [isSearching, setIsSearching] = useState(false)
+    const [paymentDateFilter, setPaymentDateFilter] = useState<Date | null>(null)
+    const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns)
 
     const paidPayments = mockPayments.filter((p) => p.status === "paid")
+
+    useEffect(() => {
+        if (searchQuery === "") {
+            setDebouncedQuery("")
+            setIsSearching(false)
+            return
+        }
+
+        setIsSearching(true)
+        const timer = setTimeout(() => {
+            setDebouncedQuery(searchQuery)
+            setIsSearching(false)
+        }, 400)
+
+        return () => clearTimeout(timer)
+    }, [searchQuery])
 
     const filteredPayments = useMemo(() => {
         let result = paidPayments
@@ -51,8 +125,12 @@ export default function PaymentsPage() {
             result = result.filter((p) => p.reconciled === isReconciled)
         }
 
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase()
+        if (paymentDateFilter) {
+            result = result.filter((p) => isSameDate(p.date, paymentDateFilter))
+        }
+
+        if (debouncedQuery.trim()) {
+            const query = debouncedQuery.toLowerCase()
             result = result.filter(
                 (p) =>
                     p.clientName.toLowerCase().includes(query) ||
@@ -64,261 +142,213 @@ export default function PaymentsPage() {
         return result.sort((a, b) =>
             new Date(b.date).getTime() - new Date(a.date).getTime()
         )
-    }, [sourceFilter, reconciledFilter, searchQuery, paidPayments])
+    }, [sourceFilter, reconciledFilter, paymentDateFilter, debouncedQuery, paidPayments])
 
     // KPIs
     const totalPayments = paidPayments.length
     const totalReconciled = paidPayments.filter((p) => p.reconciled).length
     const totalPending = paidPayments.filter((p) => !p.reconciled).length
+    const sourceClientCount = paidPayments.filter((p) => p.source === "client").length
+    const sourceCollectorCount = paidPayments.filter((p) => p.source === "collector").length
+    const sourceAdminCount = paidPayments.filter((p) => p.source === "admin").length
+    const unlinkedPayments = paidPayments.filter((p) => !p.invoiceId).length
     const totalAmount = paidPayments.reduce((sum, p) => sum + p.amount, 0)
 
-    const formatCurrency = (amount: number) =>
-        `$${amount.toLocaleString("en-US")}`
-
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return "-"
-        const date = new Date(dateStr)
-        return date.toLocaleDateString("es-MX", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric"
-        })
-    }
-
-    const getInvoiceForPayment = (invoiceId?: string) => {
-        if (!invoiceId) return null
-        return mockInvoices.find((inv) => inv.id === invoiceId)
-    }
-
-    const getMethodIcon = (method: string) => {
-        const m = method.toLowerCase()
-        if (m.includes("tarjeta") || m.includes("card")) return CreditCard
-        if (m.includes("transfer")) return Building
-        if (m.includes("efectivo") || m.includes("cash")) return Banknote
-        if (m.includes("oxxo")) return Building
-        return DollarSign
-    }
+    const columns: ColumnDef<Payment>[] = [
+        {
+            id: "reference",
+            header: "Referencia",
+            cell: (row) => (
+                <span className="font-mono text-[13px] text-zinc-400">
+                    {row.reference || row.id}
+                </span>
+            ),
+        },
+        {
+            id: "client",
+            header: "Cliente",
+            cell: (row) => (
+                <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-zinc-500" />
+                    <span className="text-sm font-medium text-zinc-200">{row.clientName}</span>
+                </div>
+            ),
+        },
+        {
+            id: "amount",
+            header: "Monto",
+            cell: (row) => (
+                <span className="text-sm font-medium text-zinc-200 tracking-tight">{formatCurrency(row.amount)}</span>
+            ),
+        },
+        {
+            id: "method",
+            header: "Método",
+            hiddenOnMobile: true,
+            cell: (row) => {
+                const MethodIcon = getMethodIcon(row.method)
+                return (
+                    <div className="flex items-center gap-1.5 text-[13px] text-zinc-400">
+                        <MethodIcon className="h-4 w-4" />
+                        {row.method}
+                    </div>
+                )
+            },
+        },
+        {
+            id: "source",
+            header: "Origen",
+            cell: (row) => (
+                <StatusBadge
+                    label={paymentSourceLabels[row.source]}
+                    colorClass={paymentSourceColors[row.source]}
+                    icon={
+                        row.source === "client" ? <User className="h-3 w-3" /> :
+                            row.source === "admin" ? <Building className="h-3 w-3" /> :
+                                <CreditCard className="h-3 w-3" />
+                    }
+                />
+            ),
+        },
+        {
+            id: "date",
+            header: "Fecha",
+            hiddenOnMobile: true,
+            cell: (row) => (
+                <span className="text-[13px] text-zinc-400">{formatDate(row.date)}</span>
+            ),
+        },
+        {
+            id: "invoice",
+            header: "Factura",
+            hiddenOnMobile: true,
+            cell: (row) => {
+                const invoice = getInvoiceForPayment(row.invoiceId)
+                return invoice ? (
+                    <a
+                        href={`/dashboard/billing/invoices/${invoice.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                        <LinkIcon className="h-3 w-3" />
+                        {invoice.id}
+                    </a>
+                ) : (
+                    <span className="text-xs text-zinc-600">—</span>
+                )
+            },
+        },
+        {
+            id: "action",
+            header: "Acción",
+            cell: (row) =>
+                row.reconciled ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                        <CheckCircle className="h-3 w-3" />
+                        Conciliado
+                    </span>
+                ) : (
+                    <button className="rounded bg-primary/20 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/30 transition-colors">
+                        Conciliar
+                    </button>
+                ),
+        },
+    ]
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div>
-                <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                    Pagos y Conciliación
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    Gestiona y concilia los pagos recibidos con las facturas
-                </p>
-            </div>
-
             {/* KPIs */}
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <div className="glass-card flex items-center gap-3 p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                        <CreditCard className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-muted-foreground">Total Pagos</p>
-                        <p className="text-lg font-bold text-foreground">{totalPayments}</p>
-                    </div>
-                </div>
-                <div className="glass-card flex items-center gap-3 p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
-                        <CheckCircle className="h-5 w-5 text-emerald-400" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-muted-foreground">Conciliados</p>
-                        <p className="text-lg font-bold text-foreground">{totalReconciled}</p>
-                    </div>
-                </div>
-                <div className="glass-card flex items-center gap-3 p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
-                        <Clock className="h-5 w-5 text-amber-400" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-muted-foreground">Pendientes</p>
-                        <p className="text-lg font-bold text-foreground">{totalPending}</p>
-                    </div>
-                </div>
-                <div className="glass-card flex items-center gap-3 p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-                        <DollarSign className="h-5 w-5 text-blue-400" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-muted-foreground">Monto Total</p>
-                        <p className="text-lg font-bold text-foreground">{formatCurrency(totalAmount)}</p>
-                    </div>
-                </div>
-            </div>
+            <PaymentKpisRow
+                total={totalPayments}
+                reconciled={totalReconciled}
+                client={sourceClientCount}
+                collector={sourceCollectorCount}
+                admin={sourceAdminCount}
+                pendingReconciliation={totalPending}
+                unlinkedPayments={unlinkedPayments}
+                collectedAmount={totalAmount}
+            />
 
-            {/* Filters */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                        type="text"
-                        placeholder="Buscar por cliente o referencia..."
+            <div className="mb-6 space-y-4">
+                <div>
+                    <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white">Directorio de Pagos</h2>
+                    <p className="mt-1 text-sm text-zinc-400">Gestiona pagos recibidos y su conciliación con facturas.</p>
+                </div>
+
+                <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+                    <TableSearch
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-lg border-0 bg-secondary py-2 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        onChange={setSearchQuery}
+                        placeholder="Buscar cliente o referencia..."
+                        isSearching={isSearching}
                     />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-2">
-                        <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Origen:</span>
-                        {sourceFilters.map((filter) => (
-                            <button
-                                key={filter.value}
-                                type="button"
-                                onClick={() => setSourceFilter(filter.value)}
-                                className={cn(
-                                    "shrink-0 rounded-lg px-2 py-1 text-xs font-medium transition-colors",
-                                    sourceFilter === filter.value
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                                )}
-                            >
-                                {filter.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Estado:</span>
-                        {reconciledFilters.map((filter) => (
-                            <button
-                                key={filter.value}
-                                type="button"
-                                onClick={() => setReconciledFilter(filter.value)}
-                                className={cn(
-                                    "shrink-0 rounded-lg px-2 py-1 text-xs font-medium transition-colors",
-                                    reconciledFilter === filter.value
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                                )}
-                            >
-                                {filter.label}
-                            </button>
-                        ))}
+
+                    <div className="hide-scrollbar flex w-full items-center gap-2 overflow-x-auto pb-2 sm:w-auto sm:pb-0">
+                        <ModernSelectTailwind
+                            items={sourceFilters.map((filter) => ({ keyId: filter.value, label: filter.label }))}
+                            width="auto"
+                            placeholder="Origen"
+                            defaultSelectedKeys={[sourceFilter]}
+                            onSelectionChange={(keys) => {
+                                if (keys.length > 0) {
+                                    setSourceFilter(keys[0] as PaymentSource | "all")
+                                }
+                            }}
+                        />
+
+                        <ModernSelectTailwind
+                            items={reconciledFilters.map((filter) => ({ keyId: filter.value, label: filter.label }))}
+                            width="auto"
+                            placeholder="Conciliación"
+                            defaultSelectedKeys={[reconciledFilter]}
+                            onSelectionChange={(keys) => {
+                                if (keys.length > 0) {
+                                    setReconciledFilter(keys[0] as "all" | "true" | "false")
+                                }
+                            }}
+                        />
+
+                        <ModernDatePicker
+                            value={paymentDateFilter}
+                            onChange={setPaymentDateFilter}
+                            placeholder="Fecha de pago"
+                        />
+
+                        <ModernSelectTailwind
+                            items={columnOptions}
+                            multiple
+                            width="auto"
+                            placeholder="Columnas"
+                            displayValue="Columnas"
+                            icon={<ArrowRightLeft size={16} />}
+                            defaultSelectedKeys={visibleColumns}
+                            onSelectionChange={(keys) => setVisibleColumns(keys)}
+                        />
                     </div>
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="glass-card overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-border/50 text-left">
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Referencia
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Cliente
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Monto
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Método
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Origen
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Fecha
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Factura
-                                </th>
-                                <th className="px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                    Acción
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/30">
-                            {filteredPayments.map((payment) => {
-                                const invoice = getInvoiceForPayment(payment.invoiceId)
-                                const MethodIcon = getMethodIcon(payment.method)
-
-                                return (
-                                    <tr
-                                        key={payment.id}
-                                        className="transition-colors hover:bg-secondary/50"
-                                    >
-                                        <td className="px-4 py-3">
-                                            <span className="font-mono text-xs text-foreground">
-                                                {payment.reference || payment.id}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-2">
-                                                <User className="h-4 w-4 text-muted-foreground" />
-                                                <span className="text-sm text-foreground">
-                                                    {payment.clientName}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="font-medium text-foreground">
-                                                {formatCurrency(payment.amount)}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                                <MethodIcon className="h-4 w-4" />
-                                                {payment.method}
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <PaymentSourceBadge source={payment.source} />
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="text-sm text-muted-foreground">
-                                                {formatDate(payment.date)}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {invoice ? (
-                                                <a
-                                                    href={`/dashboard/billing/invoices/${invoice.id}`}
-                                                    className="flex items-center gap-1 text-xs text-primary hover:underline"
-                                                >
-                                                    <LinkIcon className="h-3 w-3" />
-                                                    {invoice.id}
-                                                </a>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground">—</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {payment.reconciled ? (
-                                                <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
-                                                    <CheckCircle className="h-3 w-3" />
-                                                    Conciliado
-                                                </span>
-                                            ) : (
-                                                <button className="rounded bg-primary/20 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/30 transition-colors">
-                                                    Conciliar
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-
-                {filteredPayments.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <CreditCard className="h-12 w-12 text-muted-foreground/50" />
-                        <p className="mt-4 text-sm text-muted-foreground">
-                            No se encontraron pagos
-                        </p>
-                    </div>
-                )}
-            </div>
+            <DataTable<Payment>
+                data={filteredPayments}
+                columns={columns}
+                visibleColumns={visibleColumns}
+                isSearching={isSearching}
+                getRowId={(row) => row.id}
+                emptyIcon={<CreditCard className="h-12 w-12 text-zinc-600" />}
+                emptyMessage={
+                    debouncedQuery
+                        ? `No se encontraron resultados para "${debouncedQuery}".`
+                        : "No se encontraron pagos con los filtros seleccionados."
+                }
+                footer={
+                    <TablePagination
+                        totalItems={paidPayments.length}
+                        filteredItems={filteredPayments.length}
+                        itemName="pagos"
+                        isLoading={isSearching}
+                    />
+                }
+            />
         </div>
     )
 }

@@ -28,9 +28,6 @@ const PANEL_STYLES = `
 .roi-hide-arrows {
   -moz-appearance: textfield;
 }
-.roi-scrollbar::-webkit-scrollbar { width: 4px; }
-.roi-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.roi-scrollbar::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
 `
 
 /* ══════════════════════════════════════════════════════════
@@ -335,7 +332,7 @@ export function RoiSimulatorPanel({ cell, onClose }: RoiSimulatorPanelProps) {
                 <div
                     ref={scrollRef}
                     onScroll={checkScroll}
-                    className="roi-scrollbar relative flex-1 space-y-4 overflow-y-auto p-3.5"
+                    className="noc-scrollbar relative flex-1 space-y-4 overflow-y-auto p-3.5"
                 >
                     {/* SECCIÓN 1: Inversión */}
                     <div className="rounded-xl border border-white/5 bg-black/20 p-3">

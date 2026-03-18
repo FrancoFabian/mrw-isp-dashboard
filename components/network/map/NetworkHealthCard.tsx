@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import type { NetworkHealthSummary, NetworkStatus } from "@/lib/health/types"
 import { NETWORK_STATUS_LABELS } from "@/lib/health/types"
 import type { MapNodeStatus } from "@/types/network/mapProjection"
@@ -230,11 +230,13 @@ function glowColor(status: NetworkStatus): string {
 interface NetworkHealthCardProps {
     health: NetworkHealthSummary
     onFilterByStatus?: (status: MapNodeStatus) => void
+    /** When true, start in collapsed pill state (for compact viewports) */
+    forceCollapsed?: boolean
 }
 
-export function NetworkHealthCard({ health, onFilterByStatus }: NetworkHealthCardProps) {
+function NetworkHealthCardInner({ health, onFilterByStatus, forceCollapsed }: NetworkHealthCardProps) {
     const [isLoaded, setIsLoaded] = useState(false)
-    const [isExpanded, setIsExpanded] = useState(true)
+    const [isExpanded, setIsExpanded] = useState(!forceCollapsed)
 
     useEffect(() => {
         setIsLoaded(true)
@@ -255,7 +257,7 @@ export function NetworkHealthCard({ health, onFilterByStatus }: NetworkHealthCar
             <style>{HEALTH_BAR_STYLES}</style>
 
             {/* Relative wrapper for morph effect */}
-            <div className="pointer-events-auto relative flex h-[120px] items-center justify-center">
+            <div className="pointer-events-auto relative flex h-[120px] items-center justify-end">
 
                 {/* ── COLLAPSED STATE (magic pill) ── */}
                 <div
@@ -280,7 +282,7 @@ export function NetworkHealthCard({ health, onFilterByStatus }: NetworkHealthCar
 
                 {/* ── EXPANDED STATE (full widget) ── */}
                 <div
-                    className={`absolute flex flex-col items-center gap-4 rounded-2xl border border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 via-[#0a0a0a]/95 to-black/90 py-2 pl-4 pr-2 shadow-[0_16px_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] md:flex-row ${isExpanded && isLoaded
+                    className={`absolute right-0 flex flex-col items-center gap-4 rounded-2xl border border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 via-[#0a0a0a]/95 to-black/90 py-2 pl-4 pr-2 shadow-[0_16px_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] md:flex-row ${isExpanded && isLoaded
                         ? "scale-100 opacity-100 blur-0"
                         : "pointer-events-none scale-95 translate-y-4 opacity-0 blur-sm"
                         }`}
@@ -346,3 +348,5 @@ export function NetworkHealthCard({ health, onFilterByStatus }: NetworkHealthCar
         </>
     )
 }
+
+export const NetworkHealthCard = React.memo(NetworkHealthCardInner)

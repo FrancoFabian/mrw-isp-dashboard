@@ -8,4 +8,6 @@ export interface Plan {
   description: string
   isPopular: boolean
   clientCount: number
+  scheduledPrice?: number
+  scheduledDate?: string
 }

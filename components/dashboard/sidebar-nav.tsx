@@ -32,6 +32,7 @@ import {
   FileText,
   Globe, // Added import for Globe
   Map as MapIcon,
+  LogOut,
 } from "lucide-react"
 import {
   Tooltip,
@@ -318,6 +319,31 @@ export function SidebarNav({ mobileOpen, onMobileClose, collapsed = false }: Sid
           return <React.Fragment key={item.href}>{LinkComponent}</React.Fragment>
         })}
       </nav>
+
+      {/* Logout Button */}
+      <div className={cn("shrink-0 p-2 mt-auto border-t border-sidebar-border/50")}>
+        {isDesktopCollapsed && !isMobile ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-all duration-200 text-red-500 hover:bg-red-500/10 hover:text-red-400 border border-transparent hover:border-red-500/20"
+              >
+                <LogOut className="h-5 w-5 shrink-0" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Cerrar sesión</TooltipContent>
+          </Tooltip>
+        ) : (
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 text-red-500 hover:bg-red-500/10 hover:text-red-400 border border-transparent hover:border-red-500/20"
+          >
+            <LogOut className="h-5 w-5 shrink-0" />
+            <span className="truncate">Cerrar sesión</span>
+          </button>
+        )}
+      </div>
     </div>
   )
 
@@ -326,7 +352,7 @@ export function SidebarNav({ mobileOpen, onMobileClose, collapsed = false }: Sid
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/80 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/80 lg:hidden"
           onClick={onMobileClose}
         />
       )}
@@ -342,8 +368,8 @@ export function SidebarNav({ mobileOpen, onMobileClose, collapsed = false }: Sid
       {/* Mobile drawer */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-sidebar-border bg-gradient-to-br from-zinc-900/95 via-[#0a0a0a]/98 to-black/95 transition-transform duration-300 lg:hidden",
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed left-4 top-24 bottom-4 z-40 flex w-64 flex-col rounded-xl border border-sidebar-border bg-gradient-to-br from-zinc-900/95 via-[#0a0a0a]/98 to-black/95 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-transform duration-300 lg:hidden",
+          mobileOpen ? "translate-x-0" : "-translate-x-[120%]"
         )}
       >
         {renderSidebarContent(false, true)}
