@@ -90,6 +90,13 @@ type ImprovementFeedback = {
     changed: boolean
 }
 
+type ImprovementDiff = {
+    prefix: string
+    removed: string
+    added: string
+    suffix: string
+}
+
 const MAX_ATTACHMENTS = 4
 
 function attachmentId(): string {
@@ -102,6 +109,35 @@ function improvementPreview(value: string): string {
         return normalized
     }
     return `${normalized.slice(0, 117)}...`
+}
+
+function buildImprovementDiff(before: string, after: string): ImprovementDiff {
+    let start = 0
+    while (
+        start < before.length &&
+        start < after.length &&
+        before[start] === after[start]
+    ) {
+        start += 1
+    }
+
+    let beforeEnd = before.length - 1
+    let afterEnd = after.length - 1
+    while (
+        beforeEnd >= start &&
+        afterEnd >= start &&
+        before[beforeEnd] === after[afterEnd]
+    ) {
+        beforeEnd -= 1
+        afterEnd -= 1
+    }
+
+    return {
+        prefix: after.slice(0, start),
+        removed: before.slice(start, beforeEnd + 1),
+        added: after.slice(start, afterEnd + 1),
+        suffix: after.slice(afterEnd + 1),
+    }
 }
 
 function uploadErrorMessage(error: unknown): string {
@@ -619,6 +655,10 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
     const composerErrorMessage = composerErrorCandidates.find((candidate) => (
         candidate !== null && !isBackendUnavailableMessage(candidate)
     )) ?? null
+    const improvementDiff = useMemo(
+        () => (improvementFeedback ? buildImprovementDiff(improvementFeedback.before, improvementFeedback.after) : null),
+        [improvementFeedback]
+    )
 
     return (
         <div
@@ -836,6 +876,43 @@ export function MessageComposer({ role, pathname, userName }: MessageComposerPro
                     <p className="mt-1 text-[11px] text-muted-foreground">
                         Ahora: {improvementPreview(improvementFeedback.after)}
                     </p>
+                    {improvementFeedback.changed && improvementDiff && (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                            <div className="rounded-md border border-destructive/25 bg-background/80 p-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-destructive">
+                                    Antes
+                                </p>
+                                <p className="mt-1 whitespace-pre-wrap break-words text-[11px] leading-5 text-foreground/80">
+                                    {improvementDiff.prefix}
+                                    {improvementDiff.removed && (
+                                        <span className="rounded bg-destructive/15 px-1 text-destructive line-through">
+                                            {improvementDiff.removed}
+                                        </span>
+                                    )}
+                                    {improvementDiff.suffix}
+                                </p>
+                            </div>
+                            <div className="rounded-md border border-emerald-500/25 bg-background/80 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">
+                                        Ahora
+                                    </p>
+                                    <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary animate-pulse">
+                                        Cambio visible
+                                    </span>
+                                </div>
+                                <p className="mt-1 whitespace-pre-wrap break-words text-[11px] leading-5 text-foreground">
+                                    {improvementDiff.prefix}
+                                    {improvementDiff.added && (
+                                        <span className="rounded bg-emerald-500/15 px-1 text-emerald-700">
+                                            {improvementDiff.added}
+                                        </span>
+                                    )}
+                                    {improvementDiff.suffix}
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
